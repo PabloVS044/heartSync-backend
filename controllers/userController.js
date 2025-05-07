@@ -40,6 +40,11 @@ const validateLogin = [
   body('password').notEmpty().withMessage('Password is required')
 ];
 
+const validateUsers = [
+  query('skip').optional().isInt({ min: 0 }).withMessage('Skip must be a non-negative integer'),
+  query('limit').optional().isInt({ min: 1, max: 50 }).withMessage('Limit must be between 1 and 50')
+];
+
 const createUser = [
   ...validateUser,
   async (req, res) => {
@@ -69,6 +74,24 @@ const getUser = [
         return res.status(404).json({ error: 'User not found' });
       }
       res.json(user);
+    } catch (error) {
+      res.status(500).json({ error: error.message });
+    }
+  }
+];
+
+const getUsers = [
+  ...validateUsers,
+  async (req, res) => {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      return res.status(400).json({ errors: errors.array() });
+    }
+    try {
+      const skip = parseInt(req.query.skip) || 0;
+      const limit = parseInt(req.query.limit) || 10;
+      const users = await userModel.getUsers(skip, limit);
+      res.json(users);
     } catch (error) {
       res.status(500).json({ error: error.message });
     }
@@ -195,6 +218,7 @@ const login = [
 module.exports = {
   createUser,
   getUser,
+  getUsers,
   updateUser,
   deleteUser,
   setPreferences,

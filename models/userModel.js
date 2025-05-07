@@ -1,10 +1,10 @@
 const driver = require('../config/db');
 const { v4: uuidv4 } = require('uuid');
 const bcrypt = require('bcrypt');
+const neo4j = require('neo4j-driver');
 
 const SALT_ROUNDS = 10;
 
-// Normalizar intereses: minúsculas y sin duplicados
 const normalizeInterests = (interests) => {
   return [...new Set(interests.map(interest => interest.toLowerCase()))];
 };
@@ -117,6 +117,28 @@ const getUser = async (id) => {
       delete user.password; // No devolver la contraseña
     }
     return user;
+  } finally {
+    await session.close();
+  }
+};
+
+const getUsers = async (skip = 0, limit = 10) => {
+  const session = driver.session();
+  try {
+    const result = await session.run(
+      `MATCH (u:User)
+       RETURN u
+       ORDER BY u.lastActive DESC
+       SKIP $skip
+       LIMIT $limit`,
+      { skip: neo4j.int(skip), limit: neo4j.int(limit) }
+    );
+    const users = result.records.map(record => {
+      const user = record.get('u').properties;
+      delete user.password; // No devolver la contraseña
+      return user;
+    });
+    return users;
   } finally {
     await session.close();
   }
@@ -297,6 +319,7 @@ module.exports = {
   createUser,
   loginUser,
   getUser,
+  getUsers,
   updateUser,
   deleteUser,
   setPreferences,
