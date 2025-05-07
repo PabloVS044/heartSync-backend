@@ -2,7 +2,7 @@ const { body, param, query, validationResult } = require('express-validator');
 const userModel = require('../models/userModel');
 const jwt = require('jsonwebtoken');
 
-const JWT_SECRET = process.env.JWT_SECRET || 'your_jwt_secret'; // Cambia esto en producción
+const JWT_SECRET = process.env.JWT_SECRET;
 
 const validateUser = [
   body('name').notEmpty().withMessage('Name is required'),
