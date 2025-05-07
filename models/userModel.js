@@ -1,5 +1,8 @@
 const driver = require('../config/db');
 const { v4: uuidv4 } = require('uuid');
+const bcrypt = require('bcrypt');
+
+const SALT_ROUNDS = 10;
 
 // Normalizar intereses: minúsculas y sin duplicados
 const normalizeInterests = (interests) => {
@@ -9,9 +12,17 @@ const normalizeInterests = (interests) => {
 const createUser = async (userData) => {
   const session = driver.session();
   try {
-    const defaultMinAge = userData.gender === 'male' ? 30 : 18;
-    const defaultMaxAge = userData.gender === 'male' ? 80 : 25;
-    const normalizedInterests = normalizeInterests(userData.interests);
+    const defaultMinAge = userData.gender === 'male' ? 31 : 18;
+    const defaultMaxAge = userData.gender === 'male' ? 50 : 24;
+    const normalizedInterests = normalizeInterests(userData.interests || []);
+    
+    // Hashear la contraseña si se proporciona
+    let hashedPassword = '';
+    if (userData.password) {
+      hashedPassword = await bcrypt.hash(userData.password, SALT_ROUNDS);
+    } else {
+      throw new Error('La contraseña es obligatoria');
+    }
     
     const result = await session.run(
       `CREATE (u:User {
@@ -19,6 +30,7 @@ const createUser = async (userData) => {
         name: $name, 
         surname: $surname, 
         email: $email, 
+        password: $password,
         age: $age, 
         country: $country, 
         gender: $gender, 
@@ -43,18 +55,50 @@ const createUser = async (userData) => {
         name: userData.name,
         surname: userData.surname,
         email: userData.email,
+        password: hashedPassword,
         age: userData.age,
         country: userData.country,
         gender: userData.gender,
         interests: normalizedInterests,
-        photos: userData.photos,
+        photos: userData.photos || [],
         bio: userData.bio || '',
         lastActive: new Date().toISOString(),
         minAgePreference: userData.minAgePreference || defaultMinAge,
         maxAgePreference: userData.maxAgePreference || defaultMaxAge
       }
     );
-    return result.records[0].get('u').properties;
+    const user = result.records[0].get('u').properties;
+    delete user.password; // No devolver la contraseña
+    return user;
+  } catch (error) {
+    throw error;
+  } finally {
+    await session.close();
+  }
+};
+
+const loginUser = async (email, password) => {
+  const session = driver.session();
+  try {
+    const result = await session.run(
+      `MATCH (u:User {email: $email}) 
+       RETURN u`,
+      { email }
+    );
+    if (result.records.length === 0) {
+      throw new Error('Usuario no encontrado');
+    }
+    const user = result.records[0].get('u').properties;
+    
+    // Verificar contraseña
+    const isMatch = await bcrypt.compare(password, user.password);
+    if (!isMatch) {
+      throw new Error('Contraseña incorrecta');
+    }
+    
+    return { id: user.id, email: user.email };
+  } catch (error) {
+    throw error;
   } finally {
     await session.close();
   }
@@ -68,7 +112,11 @@ const getUser = async (id) => {
        RETURN u`,
       { id }
     );
-    return result.records.length > 0 ? result.records[0].get('u').properties : null;
+    const user = result.records.length > 0 ? result.records[0].get('u').properties : null;
+    if (user) {
+      delete user.password; // No devolver la contraseña
+    }
+    return user;
   } finally {
     await session.close();
   }
@@ -77,13 +125,34 @@ const getUser = async (id) => {
 const updateUser = async (id, userData) => {
   const session = driver.session();
   try {
-    const normalizedInterests = normalizeInterests(userData.interests);
+    const normalizedInterests = normalizeInterests(userData.interests || []);
+    const updateData = {
+      id,
+      name: userData.name,
+      surname: userData.surname,
+      email: userData.email,
+      age: userData.age,
+      country: userData.country,
+      gender: userData.gender,
+      interests: normalizedInterests,
+      photos: userData.photos || [],
+      bio: userData.bio || '',
+      lastActive: new Date().toISOString(),
+      minAgePreference: userData.minAgePreference,
+      maxAgePreference: userData.maxAgePreference
+    };
+    
+    // Hashear la contraseña si se proporciona
+    if (userData.password) {
+      updateData.password = await bcrypt.hash(userData.password, SALT_ROUNDS);
+    }
     
     const result = await session.run(
       `MATCH (u:User {id: $id})
        SET u.name = $name, 
            u.surname = $surname, 
            u.email = $email, 
+           ${userData.password ? 'u.password = $password,' : ''}
            u.age = $age, 
            u.country = $country, 
            u.gender = $gender, 
@@ -105,23 +174,13 @@ const updateUser = async (id, userData) => {
          CREATE (u)-[:SHARES_INTEREST]->(i)
        )
        RETURN u`,
-      {
-        id,
-        name: userData.name,
-        surname: userData.surname,
-        email: userData.email,
-        age: userData.age,
-        country: userData.country,
-        gender: userData.gender,
-        interests: normalizedInterests,
-        photos: userData.photos,
-        bio: userData.bio || '',
-        lastActive: new Date().toISOString(),
-        minAgePreference: userData.minAgePreference,
-        maxAgePreference: userData.maxAgePreference
-      }
+      updateData
     );
-    return result.records.length > 0 ? result.records[0].get('u').properties : null;
+    const user = result.records.length > 0 ? result.records[0].get('u').properties : null;
+    if (user) {
+      delete user.password; // No devolver la contraseña
+    }
+    return user;
   } finally {
     await session.close();
   }
@@ -189,17 +248,14 @@ const getMatches = async (userId, skip = 0, limit = 10) => {
   try {
     const result = await session.run(
       `MATCH (u:User {id: $userId})-[:HAS_GENDER]->(g:Gender)
-       // Prioridad 1: Matches mutuos
        OPTIONAL MATCH (u)-[:MATCHED]->(matched:User)
        WHERE matched.age >= u.minAgePreference AND matched.age <= u.maxAgePreference
-       // Prioridad 2: Usuarios que han dado like al usuario
        OPTIONAL MATCH (liked:User)-[:LIKES]->(u)
        WHERE liked.age >= u.minAgePreference 
          AND liked.age <= u.maxAgePreference
          AND NOT EXISTS((u)-[:MATCHED]->(liked))
          AND ((g.name = 'male' AND u.age < 25 AND liked.gender = 'female' AND liked.age > 30)
            OR (g.name = 'female' AND u.age > 30 AND liked.gender = 'male' AND liked.age < 25))
-       // Prioridad 3: Coincidencias por intereses y país
        OPTIONAL MATCH (potential:User)-[:HAS_GENDER]->(pg:Gender)
        WHERE potential.age >= u.minAgePreference 
          AND potential.age <= u.maxAgePreference
@@ -239,6 +295,7 @@ const getMatches = async (userId, skip = 0, limit = 10) => {
 
 module.exports = {
   createUser,
+  loginUser,
   getUser,
   updateUser,
   deleteUser,

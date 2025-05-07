@@ -1,5 +1,8 @@
 const { body, param, query, validationResult } = require('express-validator');
 const userModel = require('../models/userModel');
+const jwt = require('jsonwebtoken');
+
+const JWT_SECRET = process.env.JWT_SECRET || 'your_jwt_secret'; // Cambia esto en producción
 
 const validateUser = [
   body('name').notEmpty().withMessage('Name is required'),
@@ -30,6 +33,11 @@ const validateMatches = [
 const validateLike = [
   param('id').notEmpty().withMessage('User ID is required'),
   param('targetId').notEmpty().withMessage('Target User ID is required')
+];
+
+const validateLogin = [
+  body('email').isEmail().withMessage('Invalid email'),
+  body('password').notEmpty().withMessage('Password is required')
 ];
 
 const createUser = [
@@ -163,6 +171,27 @@ const getMatches = [
   }
 ];
 
+const login = [
+  ...validateLogin,
+  async (req, res) => {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      return res.status(400).json({ errors: errors.array() });
+    }
+    try {
+      const { email, password } = req.body;
+      const user = await userModel.loginUser(email, password);
+
+      // Generar JWT
+      const token = jwt.sign({ userId: user.id, email: user.email }, JWT_SECRET, { expiresIn: '1h' });
+
+      res.status(200).json({ token, userId: user.id });
+    } catch (error) {
+      res.status(401).json({ error: error.message });
+    }
+  }
+];
+
 module.exports = {
   createUser,
   getUser,
@@ -170,5 +199,6 @@ module.exports = {
   deleteUser,
   setPreferences,
   addLike,
-  getMatches
+  getMatches,
+  login
 };
