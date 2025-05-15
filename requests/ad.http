@@ -1,0 +1,37 @@
+### Get all advertisements
+GET http://localhost:3000/api/ads
+Content-Type: application/json
+
+### Get advertisement by id
+GET http://localhost:3000/api/ads/1
+Content-Type: application/json
+
+### Create new advertisement
+POST http://localhost:3000/ads
+Content-Type: application/json
+
+{
+  "title": "Prueba 2",
+  "description": "Probando relaciones de los ads",
+  "image": "https://example.com/travel-ad.jpg",
+  "targetedInterests": ["viajar", "comida", "lectura"]
+}
+
+### Update advertisement
+PUT http://localhost:3000/api/ads/1
+Content-Type: application/json
+
+{
+  "title": "Updated Travel Adventure Package",
+  "description": "Explore exotic destinations with our updated travel offer!",
+  "image": "https://example.com/updated-travel-ad.jpg",
+  "targetedInterests": ["travel", "adventure"]
+}
+
+### Delete advertisement
+DELETE http://localhost:3000/api/ads/1
+Content-Type: application/json
+
+### Get advertisements for a user
+GET http://localhost:3000/api/ads/user/user123
+Content-Type: application/json
