@@ -10,5 +10,6 @@ router.put('/:id', userController.updateUser);
 router.delete('/:id', userController.deleteUser);
 router.post('/:id/preferences', userController.setPreferences);
 router.get('/:id/matches', userController.getMatches);
+router.post('/:id/like/:targetId', userController.addLike); // Updated route to include targetId
 
 module.exports = router;

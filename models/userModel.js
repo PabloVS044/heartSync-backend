@@ -16,12 +16,12 @@ const createUser = async (userData) => {
     const defaultMaxAge = userData.gender === 'male' ? 50 : 24;
     const normalizedInterests = normalizeInterests(userData.interests || []);
     
-    // Hashear la contraseña si se proporciona
+    // Hash password if provided
     let hashedPassword = '';
     if (userData.password) {
       hashedPassword = await bcrypt.hash(userData.password, SALT_ROUNDS);
     } else {
-      throw new Error('La contraseña es obligatoria');
+      throw new Error('Password is required');
     }
     
     const result = await session.run(
@@ -39,7 +39,11 @@ const createUser = async (userData) => {
         bio: $bio,
         lastActive: $lastActive,
         minAgePreference: $minAgePreference,
-        maxAgePreference: $maxAgePreference
+        maxAgePreference: $maxAgePreference,
+        internationalMode: $internationalMode,
+        likesGiven: $likesGiven,
+        likesReceived: $likesReceived,
+        matches: $matches
       })
       MERGE (c:Country {name: $country})
       MERGE (g:Gender {name: $gender})
@@ -64,11 +68,15 @@ const createUser = async (userData) => {
         bio: userData.bio || '',
         lastActive: new Date().toISOString(),
         minAgePreference: userData.minAgePreference || defaultMinAge,
-        maxAgePreference: userData.maxAgePreference || defaultMaxAge
+        maxAgePreference: userData.maxAgePreference || defaultMaxAge,
+        internationalMode: userData.internationalMode || false, // Default to false
+        likesGiven: [], // Initialize empty arrays
+        likesReceived: [],
+        matches: []
       }
     );
     const user = result.records[0].get('u').properties;
-    delete user.password; // No devolver la contraseña
+    delete user.password; // Do not return password
     return user;
   } catch (error) {
     throw error;
@@ -86,14 +94,14 @@ const loginUser = async (email, password) => {
       { email }
     );
     if (result.records.length === 0) {
-      throw new Error('Usuario no encontrado');
+      throw new Error('User not found');
     }
     const user = result.records[0].get('u').properties;
     
-    // Verificar contraseña
+    // Verify password
     const isMatch = await bcrypt.compare(password, user.password);
     if (!isMatch) {
-      throw new Error('Contraseña incorrecta');
+      throw new Error('Incorrect password');
     }
     
     return { id: user.id, email: user.email };
@@ -114,7 +122,7 @@ const getUser = async (id) => {
     );
     const user = result.records.length > 0 ? result.records[0].get('u').properties : null;
     if (user) {
-      delete user.password; // No devolver la contraseña
+      delete user.password; // Do not return password
     }
     return user;
   } finally {
@@ -135,7 +143,7 @@ const getUsers = async (skip = 0, limit = 10) => {
     );
     const users = result.records.map(record => {
       const user = record.get('u').properties;
-      delete user.password; // No devolver la contraseña
+      delete user.password; // Do not return password
       return user;
     });
     return users;
@@ -161,10 +169,11 @@ const updateUser = async (id, userData) => {
       bio: userData.bio || '',
       lastActive: new Date().toISOString(),
       minAgePreference: userData.minAgePreference,
-      maxAgePreference: userData.maxAgePreference
+      maxAgePreference: userData.maxAgePreference,
+      internationalMode: userData.internationalMode || false // Update internationalMode
     };
     
-    // Hashear la contraseña si se proporciona
+    // Hash password if provided
     if (userData.password) {
       updateData.password = await bcrypt.hash(userData.password, SALT_ROUNDS);
     }
@@ -183,7 +192,8 @@ const updateUser = async (id, userData) => {
            u.bio = $bio,
            u.lastActive = $lastActive,
            u.minAgePreference = $minAgePreference,
-           u.maxAgePreference = $maxAgePreference
+           u.maxAgePreference = $maxAgePreference,
+           u.internationalMode = $internationalMode
        MERGE (c:Country {name: $country})
        MERGE (g:Gender {name: $gender})
        CREATE (u)-[:FROM_COUNTRY]->(c)
@@ -200,7 +210,7 @@ const updateUser = async (id, userData) => {
     );
     const user = result.records.length > 0 ? result.records[0].get('u').properties : null;
     if (user) {
-      delete user.password; // No devolver la contraseña
+      delete user.password; // Do not return password
     }
     return user;
   } finally {
@@ -243,14 +253,16 @@ const addLike = async (userId, targetUserId) => {
   const session = driver.session();
   try {
     const result = await session.run(
-      `MATCH (u:User {id: $userId}), (t:User {id: $targetUserId})
+      `MATCH (u:User {id: $userId})-[:HAS_GENDER]->(ug:Gender),
+             (t:User {id: $targetUserId})-[:HAS_GENDER]->(tg:Gender)
        WHERE u <> t
-       CREATE (u)-[l:LIKES]->(t)
+         AND ((ug.name = 'male' AND tg.name = 'female') OR (ug.name = 'female' AND tg.name = 'male'))
+       SET u.likesGiven = coalesce(u.likesGiven, []) + $targetUserId,
+           t.likesReceived = coalesce(t.likesReceived, []) + $userId
        WITH u, t
-       MATCH (t)-[:LIKES]->(u)
-       WHERE EXISTS((u)-[:LIKES]->(t))
-       MERGE (u)-[m1:MATCHED]->(t)
-       MERGE (t)-[m2:MATCHED]->(u)
+       WHERE $targetUserId IN u.likesReceived AND $userId IN t.likesGiven
+       SET u.matches = coalesce(u.matches, []) + $targetUserId,
+           t.matches = coalesce(t.matches, []) + $userId
        RETURN u, t, EXISTS((u)-[:MATCHED]->(t)) AS isMatched`,
       { userId, targetUserId }
     );
@@ -270,21 +282,34 @@ const getMatches = async (userId, skip = 0, limit = 10) => {
   try {
     const result = await session.run(
       `MATCH (u:User {id: $userId})-[:HAS_GENDER]->(g:Gender)
-       OPTIONAL MATCH (u)-[:MATCHED]->(matched:User)
-       WHERE matched.age >= u.minAgePreference AND matched.age <= u.maxAgePreference
-       OPTIONAL MATCH (liked:User)-[:LIKES]->(u)
-       WHERE liked.age >= u.minAgePreference 
+       OPTIONAL MATCH (matched:User)-[:HAS_GENDER]->(mg:Gender)
+       WHERE matched.id IN u.matches
+         AND matched.age >= u.minAgePreference 
+         AND matched.age <= u.maxAgePreference
+         AND (u.internationalMode = true OR (MATCH (u)-[:FROM_COUNTRY]->(uc:Country), 
+                                             (matched)-[:FROM_COUNTRY]->(mc:Country) 
+                                             WHERE uc.name = mc.name))
+         AND ((g.name = 'male' AND mg.name = 'female') OR (g.name = 'female' AND mg.name = 'male'))
+       OPTIONAL MATCH (liked:User)-[:HAS_GENDER]->(lg:Gender)
+       WHERE liked.id IN u.likesReceived
+         AND NOT liked.id IN u.matches
+         AND liked.age >= u.minAgePreference 
          AND liked.age <= u.maxAgePreference
-         AND NOT EXISTS((u)-[:MATCHED]->(liked))
-         AND ((g.name = 'male' AND u.age < 25 AND liked.gender = 'female' AND liked.age > 30)
-           OR (g.name = 'female' AND u.age > 30 AND liked.gender = 'male' AND liked.age < 25))
+         AND (u.internationalMode = true OR (MATCH (u)-[:FROM_COUNTRY]->(uc:Country), 
+                                             (liked)-[:FROM_COUNTRY]->(lc:Country) 
+                                             WHERE uc.name = lc.name))
+         AND ((g.name = 'male' AND lg.name = 'female' AND liked.age > 30)
+           OR (g.name = 'female' AND lg.name = 'male' AND liked.age < 25))
        OPTIONAL MATCH (potential:User)-[:HAS_GENDER]->(pg:Gender)
-       WHERE potential.age >= u.minAgePreference 
+       WHERE NOT potential.id IN u.matches
+         AND NOT potential.id IN u.likesReceived
+         AND potential.age >= u.minAgePreference 
          AND potential.age <= u.maxAgePreference
-         AND NOT EXISTS((u)-[:MATCHED]->(potential))
-         AND NOT EXISTS((potential)-[:LIKES]->(u))
-         AND ((g.name = 'male' AND u.age < 25 AND pg.name = 'female' AND potential.age > 30)
-           OR (g.name = 'female' AND u.age > 30 AND pg.name = 'male' AND potential.age < 25))
+         AND (u.internationalMode = true OR (MATCH (u)-[:FROM_COUNTRY]->(uc:Country), 
+                                             (potential)-[:FROM_COUNTRY]->(pc:Country) 
+                                             WHERE uc.name = pc.name))
+         AND ((g.name = 'male' AND pg.name = 'female' AND potential.age > 30)
+           OR (g.name = 'female' AND pg.name = 'male' AND potential.age < 25))
        MATCH (u)-[:SHARES_INTEREST]->(i:Interest)<-[:SHARES_INTEREST]-(potential)
        MATCH (u)-[:FROM_COUNTRY]->(c:Country)<-[:FROM_COUNTRY]-(potential)
        WITH u, matched, liked, potential, count(i) AS sharedInterests
@@ -303,7 +328,7 @@ const getMatches = async (userId, skip = 0, limit = 10) => {
          END, sharedInterests DESC
        SKIP $skip
        LIMIT $limit`,
-      { userId, skip, limit }
+      { userId, skip: neo4j.int(skip), limit: neo4j.int(limit) }
     );
     return result.records.map(record => ({
       ...record.get('match').user.properties,

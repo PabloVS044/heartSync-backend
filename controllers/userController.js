@@ -8,6 +8,7 @@ const validateUser = [
   body('name').notEmpty().withMessage('Name is required'),
   body('surname').notEmpty().withMessage('Surname is required'),
   body('email').isEmail().withMessage('Invalid email'),
+  body('password').notEmpty().withMessage('Password is required'),
   body('age').isInt({ min: 18 }).withMessage('Age must be at least 18'),
   body('country').notEmpty().withMessage('Country is required'),
   body('gender').isIn(['male', 'female']).withMessage('Gender must be male or female'),
@@ -15,7 +16,8 @@ const validateUser = [
   body('photos').isArray().withMessage('Photos must be an array'),
   body('bio').optional().isLength({ max: 500 }).withMessage('Bio must be 500 characters or less'),
   body('minAgePreference').optional().isInt({ min: 18 }).withMessage('Minimum age preference must be at least 18'),
-  body('maxAgePreference').optional().isInt({ min: 18 }).withMessage('Maximum age preference must be at least 18')
+  body('maxAgePreference').optional().isInt({ min: 18 }).withMessage('Maximum age preference must be at least 18'),
+  body('internationalMode').optional().isBoolean().withMessage('International mode must be a boolean')
 ];
 
 const validatePreferences = [
@@ -205,7 +207,7 @@ const login = [
       const { email, password } = req.body;
       const user = await userModel.loginUser(email, password);
 
-      // Generar JWT
+      // Generate JWT
       const token = jwt.sign({ userId: user.id, email: user.email }, JWT_SECRET, { expiresIn: '1h' });
 
       res.status(200).json({ token, userId: user.id });
