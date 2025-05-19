@@ -1,17 +1,29 @@
-// server.js o app.js
 const express = require('express');
 const cors = require('cors');
+const http = require('http');
+const { Server } = require('socket.io');
 const userRoutes = require('./routes/userRoutes');
 const adRoutes = require('./routes/adRoutes');
+const chatRoutes = require('./routes/chatRoutes');
+const matchRoutes = require('./routes/matchRoutes');
+const chatModel = require('./models/chatModel');
 require('dotenv').config();
 
-class Server {
+class HeartSyncServer {
   constructor() {
     this.app = express();
+    this.server = http.createServer(this.app);
+    this.io = new Server(this.server, {
+      cors: {
+        origin: '*',
+        methods: ['GET', 'POST']
+      }
+    });
     this.port = process.env.PORT || 3000;
 
     this.middlewares();
     this.routes();
+    this.socketEvents();
   }
 
   middlewares() {
@@ -23,14 +35,41 @@ class Server {
   routes() {
     this.app.use('/users', userRoutes);
     this.app.use('/ads', adRoutes);
+    this.app.use('/chats', chatRoutes);
+    this.app.use('/matches', matchRoutes);
+  }
+
+  socketEvents() {
+    this.io.on('connection', (socket) => {
+      console.log('User connected:', socket.id);
+
+      socket.on('joinChat', (chatId) => {
+        socket.join(chatId);
+        console.log(`User ${socket.id} joined chat ${chatId}`);
+      });
+
+      socket.on('sendMessage', async ({ chatId, senderId, content }) => {
+        try {
+          const chat = await chatModel.addMessage(chatId, senderId, content);
+          const message = chat.messages[chat.messages.length - 1];
+          this.io.to(chatId).emit('message', message);
+        } catch (error) {
+          socket.emit('error', { message: error.message });
+        }
+      });
+
+      socket.on('disconnect', () => {
+        console.log('User disconnected:', socket.id);
+      });
+    });
   }
 
   listen() {
-    this.app.listen(this.port, () => {
+    this.server.listen(this.port, () => {
       console.log(`Server running on port ${this.port}`);
     });
   }
 }
 
-const server = new Server();
+const server = new HeartSyncServer();
 server.listen();
