@@ -290,53 +290,61 @@ const getMatches = async (userId, skip = 0, limit = 10) => {
   const session = driver.session();
   try {
     const result = await session.run(
-      `MATCH (u:User {id: $userId})-[:HAS_GENDER]->(g:Gender)
-       OPTIONAL MATCH (matched:User)-[:HAS_GENDER]->(mg:Gender)
-       WHERE matched.id IN u.matches
-         AND matched.age >= u.minAgePreference 
-         AND matched.age <= u.maxAgePreference
-         AND (u.internationalMode = true OR (MATCH (u)-[:FROM_COUNTRY]->(uc:Country), 
-                                             (matched)-[:FROM_COUNTRY]->(mc:Country) 
-                                             WHERE uc.name = mc.name))
-         AND ((g.name = 'male' AND mg.name = 'female') OR (g.name = 'female' AND mg.name = 'male'))
-       OPTIONAL MATCH (liked:User)-[:HAS_GENDER]->(lg:Gender)
-       WHERE liked.id IN u.likesReceived
-         AND NOT liked.id IN u.matches
-         AND liked.age >= u.minAgePreference 
-         AND matched.age <= u.maxAgePreference
-         AND (u.internationalMode = true OR (MATCH (u)-[:FROM_COUNTRY]->(uc:Country), 
-                                             (liked)-[:FROM_COUNTRY]->(lc:Country) 
-                                             WHERE uc.name = lc.name))
-         AND ((g.name = 'male' AND lg.name = 'female' AND liked.age > 30)
-           OR (g.name = 'female' AND lg.name = 'male' AND liked.age < 25))
-       OPTIONAL MATCH (potential:User)-[:HAS_GENDER]->(pg:Gender)
-       WHERE NOT potential.id IN u.matches
-         AND NOT potential.id IN u.likesReceived
-         AND potential.age >= u.minAgePreference 
-         AND potential.age <= u.maxAgePreference
-         AND (u.internationalMode = true OR (MATCH (u)-[:FROM_COUNTRY]->(uc:Country), 
-                                             (potential)-[:FROM_COUNTRY]->(pc:Country) 
-                                             WHERE uc.name = pc.name))
-         AND ((g.name = 'male' AND pg.name = 'female' AND potential.age > 30)
-           OR (g.name = 'female' AND pg.name = 'male' AND potential.age < 25))
-       MATCH (u)-[:SHARES_INTEREST]->(i:Interest)<-[:SHARES_INTEREST]-(potential)
-       MATCH (u)-[:FROM_COUNTRY]->(c:Country)<-[:FROM_COUNTRY]-(potential)
-       WITH u, matched, liked, potential, count(i) AS sharedInterests
-       WHERE matched IS NOT NULL OR liked IS NOT NULL OR potential IS NOT NULL
-       RETURN 
-         CASE 
-           WHEN matched IS NOT NULL THEN {user: matched, type: 'matched', sharedInterests: 0}
-           WHEN liked IS NOT NULL THEN {user: liked, type: 'liked', sharedInterests: 0}
-           ELSE {user: potential, type: 'potential', sharedInterests: sharedInterests}
-         END AS match
-       ORDER BY 
-         CASE 
-           WHEN matched IS NOT NULL THEN 1
-           WHEN liked IS NOT NULL THEN 2
-           ELSE 3
-         END, sharedInterests DESC
-       SKIP $skip
-       LIMIT $limit`,
+      `
+      MATCH (u:User {id: $userId})-[:HAS_GENDER]->(g:Gender)
+      MATCH (u)-[:FROM_COUNTRY]->(uc:Country)
+
+      // MATCHED USERS
+      OPTIONAL MATCH (matched:User)-[:HAS_GENDER]->(mg:Gender),
+                     (matched)-[:FROM_COUNTRY]->(mc:Country)
+      WHERE matched.id IN u.matches
+        AND matched.age >= u.minAgePreference 
+        AND matched.age <= u.maxAgePreference
+        AND (u.internationalMode = true OR uc.name = mc.name)
+        AND ((g.name = 'male' AND mg.name = 'female') OR (g.name = 'female' AND mg.name = 'male'))
+
+      // LIKED USERS
+      OPTIONAL MATCH (liked:User)-[:HAS_GENDER]->(lg:Gender),
+                     (liked)-[:FROM_COUNTRY]->(lc:Country)
+      WHERE liked.id IN u.likesReceived
+        AND NOT liked.id IN u.matches
+        AND liked.age >= u.minAgePreference 
+        AND liked.age <= u.maxAgePreference
+        AND (u.internationalMode = true OR uc.name = lc.name)
+        AND ((g.name = 'male' AND lg.name = 'female' AND liked.age > 30)
+          OR (g.name = 'female' AND lg.name = 'male' AND liked.age < 25))
+
+      // POTENTIAL USERS
+      OPTIONAL MATCH (potential:User)-[:HAS_GENDER]->(pg:Gender),
+                     (potential)-[:FROM_COUNTRY]->(pc:Country)
+      WHERE NOT potential.id IN u.matches
+        AND NOT potential.id IN u.likesReceived
+        AND potential.age >= u.minAgePreference 
+        AND potential.age <= u.maxAgePreference
+        AND (u.internationalMode = true OR uc.name = pc.name)
+        AND ((g.name = 'male' AND pg.name = 'female' AND potential.age > 30)
+          OR (g.name = 'female' AND pg.name = 'male' AND potential.age < 25))
+
+      OPTIONAL MATCH (u)-[:SHARES_INTEREST]->(i:Interest)<-[:SHARES_INTEREST]-(potential)
+
+      WITH u, matched, liked, potential, count(i) AS sharedInterests
+      WHERE matched IS NOT NULL OR liked IS NOT NULL OR potential IS NOT NULL
+
+      RETURN 
+        CASE 
+          WHEN matched IS NOT NULL THEN {user: matched, type: 'matched', sharedInterests: 0}
+          WHEN liked IS NOT NULL THEN {user: liked, type: 'liked', sharedInterests: 0}
+          ELSE {user: potential, type: 'potential', sharedInterests: sharedInterests}
+        END AS match
+      ORDER BY 
+        CASE 
+          WHEN matched IS NOT NULL THEN 1
+          WHEN liked IS NOT NULL THEN 2
+          ELSE 3
+        END, sharedInterests DESC
+      SKIP $skip
+      LIMIT $limit
+      `,
       { userId, skip: neo4j.int(skip), limit: neo4j.int(limit) }
     );
     return result.records.map(record => ({
@@ -348,6 +356,7 @@ const getMatches = async (userId, skip = 0, limit = 10) => {
     await session.close();
   }
 };
+
 
 module.exports = {
   createUser,
