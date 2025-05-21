@@ -2,6 +2,8 @@ const driver = require('../config/db');
 const { v4: uuidv4 } = require('uuid');
 const bcrypt = require('bcrypt');
 const neo4j = require('neo4j-driver');
+const matchModel = require('./matchModel');
+const chatModel = require('./chatModel');
 
 const SALT_ROUNDS = 10;
 
@@ -69,14 +71,14 @@ const createUser = async (userData) => {
         lastActive: new Date().toISOString(),
         minAgePreference: userData.minAgePreference || defaultMinAge,
         maxAgePreference: userData.maxAgePreference || defaultMaxAge,
-        internationalMode: userData.internationalMode || false, // Default to false
-        likesGiven: [], // Initialize empty arrays
+        internationalMode: userData.internationalMode || false,
+        likesGiven: [],
         likesReceived: [],
         matches: []
       }
     );
     const user = result.records[0].get('u').properties;
-    delete user.password; // Do not return password
+    delete user.password;
     return user;
   } catch (error) {
     throw error;
@@ -85,7 +87,9 @@ const createUser = async (userData) => {
   }
 };
 
-const loginUser = async (email, password) => {
+const loginUser = async (email
+
+, password) => {
   const session = driver.session();
   try {
     const result = await session.run(
@@ -98,7 +102,6 @@ const loginUser = async (email, password) => {
     }
     const user = result.records[0].get('u').properties;
     
-    // Verify password
     const isMatch = await bcrypt.compare(password, user.password);
     if (!isMatch) {
       throw new Error('Incorrect password');
@@ -122,7 +125,7 @@ const getUser = async (id) => {
     );
     const user = result.records.length > 0 ? result.records[0].get('u').properties : null;
     if (user) {
-      delete user.password; // Do not return password
+      delete user.password;
     }
     return user;
   } finally {
@@ -143,7 +146,7 @@ const getUsers = async (skip = 0, limit = 10) => {
     );
     const users = result.records.map(record => {
       const user = record.get('u').properties;
-      delete user.password; // Do not return password
+      delete user.password;
       return user;
     });
     return users;
@@ -170,10 +173,9 @@ const updateUser = async (id, userData) => {
       lastActive: new Date().toISOString(),
       minAgePreference: userData.minAgePreference,
       maxAgePreference: userData.maxAgePreference,
-      internationalMode: userData.internationalMode || false // Update internationalMode
+      internationalMode: userData.internationalMode || false
     };
     
-    // Hash password if provided
     if (userData.password) {
       updateData.password = await bcrypt.hash(userData.password, SALT_ROUNDS);
     }
@@ -210,7 +212,7 @@ const updateUser = async (id, userData) => {
     );
     const user = result.records.length > 0 ? result.records[0].get('u').properties : null;
     if (user) {
-      delete user.password; // Do not return password
+      delete user.password;
     }
     return user;
   } finally {
@@ -267,10 +269,17 @@ const addLike = async (userId, targetUserId) => {
       { userId, targetUserId }
     );
     const record = result.records[0];
+    const isMatched = record.get('isMatched');
+    
+    if (isMatched) {
+      const match = await matchModel.createMatch(userId, targetUserId);
+      await chatModel.createChat(match.match.id);
+    }
+    
     return {
       user: record.get('u').properties,
       target: record.get('t').properties,
-      isMatched: record.get('isMatched')
+      isMatched
     };
   } finally {
     await session.close();
@@ -294,7 +303,7 @@ const getMatches = async (userId, skip = 0, limit = 10) => {
        WHERE liked.id IN u.likesReceived
          AND NOT liked.id IN u.matches
          AND liked.age >= u.minAgePreference 
-         AND liked.age <= u.maxAgePreference
+         AND matched.age <= u.maxAgePreference
          AND (u.internationalMode = true OR (MATCH (u)-[:FROM_COUNTRY]->(uc:Country), 
                                              (liked)-[:FROM_COUNTRY]->(lc:Country) 
                                              WHERE uc.name = lc.name))
