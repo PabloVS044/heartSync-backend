@@ -18,7 +18,6 @@ const createUser = async (userData) => {
     const defaultMaxAge = userData.gender === 'male' ? 50 : 24;
     const normalizedInterests = normalizeInterests(userData.interests || []);
     
-    // Hash password if provided
     let hashedPassword = '';
     if (userData.password) {
       hashedPassword = await bcrypt.hash(userData.password, SALT_ROUNDS);
@@ -45,7 +44,8 @@ const createUser = async (userData) => {
         internationalMode: $internationalMode,
         likesGiven: $likesGiven,
         likesReceived: $likesReceived,
-        matches: $matches
+        matches: $matches,
+        dislikesGiven: $dislikesGiven
       })
       MERGE (c:Country {name: $country})
       MERGE (g:Gender {name: $gender})
@@ -74,7 +74,8 @@ const createUser = async (userData) => {
         internationalMode: userData.internationalMode || false,
         likesGiven: [],
         likesReceived: [],
-        matches: []
+        matches: [],
+        dislikesGiven: []
       }
     );
     const user = result.records[0].get('u').properties;
@@ -87,9 +88,7 @@ const createUser = async (userData) => {
   }
 };
 
-const loginUser = async (email
-
-, password) => {
+const loginUser = async (email, password) => {
   const session = driver.session();
   try {
     const result = await session.run(
@@ -173,7 +172,8 @@ const updateUser = async (id, userData) => {
       lastActive: new Date().toISOString(),
       minAgePreference: userData.minAgePreference,
       maxAgePreference: userData.maxAgePreference,
-      internationalMode: userData.internationalMode || false
+      internationalMode: userData.internationalMode || false,
+      dislikesGiven: userData.dislikesGiven || []
     };
     
     if (userData.password) {
@@ -195,7 +195,8 @@ const updateUser = async (id, userData) => {
            u.lastActive = $lastActive,
            u.minAgePreference = $minAgePreference,
            u.maxAgePreference = $maxAgePreference,
-           u.internationalMode = $internationalMode
+           u.internationalMode = $internationalMode,
+           u.dislikesGiven = $dislikesGiven
        MERGE (c:Country {name: $country})
        MERGE (g:Gender {name: $gender})
        CREATE (u)-[:FROM_COUNTRY]->(c)
@@ -286,6 +287,27 @@ const addLike = async (userId, targetUserId) => {
   }
 };
 
+const dislikeUser = async (userId, targetUserId) => {
+  const session = driver.session();
+  try {
+    const result = await session.run(
+      `MATCH (u:User {id: $userId}), (t:User {id: $targetUserId})
+       WHERE u <> t
+       SET u.dislikesGiven = coalesce(u.dislikesGiven, []) + $targetUserId
+       RETURN u`,
+      { userId, targetUserId }
+    );
+    const user = result.records[0]?.get('u').properties;
+    if (user) {
+      delete user.password;
+      return user;
+    }
+    throw new Error('User not found');
+  } finally {
+    await session.close();
+  }
+};
+
 const getMatches = async (userId, skip = 0, limit = 10) => {
   const session = driver.session();
   try {
@@ -303,7 +325,7 @@ const getMatches = async (userId, skip = 0, limit = 10) => {
        WHERE liked.id IN u.likesReceived
          AND NOT liked.id IN u.matches
          AND liked.age >= u.minAgePreference 
-         AND matched.age <= u.maxAgePreference
+         AND liked.age <= u.maxAgePreference
          AND (u.internationalMode = true OR (MATCH (u)-[:FROM_COUNTRY]->(uc:Country), 
                                              (liked)-[:FROM_COUNTRY]->(lc:Country) 
                                              WHERE uc.name = lc.name))
@@ -312,6 +334,7 @@ const getMatches = async (userId, skip = 0, limit = 10) => {
        OPTIONAL MATCH (potential:User)-[:HAS_GENDER]->(pg:Gender)
        WHERE NOT potential.id IN u.matches
          AND NOT potential.id IN u.likesReceived
+         AND NOT potential.id IN coalesce(u.dislikesGiven, [])
          AND potential.age >= u.minAgePreference 
          AND potential.age <= u.maxAgePreference
          AND (u.internationalMode = true OR (MATCH (u)-[:FROM_COUNTRY]->(uc:Country), 
@@ -358,5 +381,6 @@ module.exports = {
   deleteUser,
   setPreferences,
   addLike,
+  dislikeUser,
   getMatches
 };

@@ -1,6 +1,7 @@
 const { body, param, query, validationResult } = require('express-validator');
 const userModel = require('../models/userModel');
 const jwt = require('jsonwebtoken');
+const authenticateToken = require('../middleware/auth');
 
 const JWT_SECRET = process.env.JWT_SECRET;
 
@@ -33,6 +34,11 @@ const validateMatches = [
 ];
 
 const validateLike = [
+  param('id').notEmpty().withMessage('User ID is required'),
+  param('targetId').notEmpty().withMessage('Target User ID is required')
+];
+
+const validateDislike = [
   param('id').notEmpty().withMessage('User ID is required'),
   param('targetId').notEmpty().withMessage('Target User ID is required')
 ];
@@ -160,6 +166,7 @@ const setPreferences = [
 ];
 
 const addLike = [
+  authenticateToken,
   ...validateLike,
   async (req, res) => {
     const errors = validationResult(req);
@@ -167,6 +174,9 @@ const addLike = [
       return res.status(400).json({ errors: errors.array() });
     }
     try {
+      if (req.user.userId !== req.params.id) {
+        return res.status(403).json({ error: 'Unauthorized' });
+      }
       const result = await userModel.addLike(req.params.id, req.params.targetId);
       res.status(200).json({
         message: 'Like added',
@@ -178,7 +188,28 @@ const addLike = [
   }
 ];
 
+const dislikeUser = [
+  authenticateToken,
+  ...validateDislike,
+  async (req, res) => {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      return res.status(400).json({ errors: errors.array() });
+    }
+    try {
+      if (req.user.userId !== req.params.id) {
+        return res.status(403).json({ error: 'Unauthorized' });
+      }
+      const user = await userModel.dislikeUser(req.params.id, req.params.targetId);
+      res.status(200).json({ message: 'User disliked successfully', user });
+    } catch (error) {
+      res.status(500).json({ error: error.message });
+    }
+  }
+];
+
 const getMatches = [
+  authenticateToken,
   ...validateMatches,
   async (req, res) => {
     const errors = validationResult(req);
@@ -186,6 +217,9 @@ const getMatches = [
       return res.status(400).json({ errors: errors.array() });
     }
     try {
+      if (req.user.userId !== req.params.id) {
+        return res.status(403).json({ error: 'Unauthorized' });
+      }
       const skip = parseInt(req.query.skip) || 0;
       const limit = parseInt(req.query.limit) || 10;
       const matches = await userModel.getMatches(req.params.id, skip, limit);
@@ -206,10 +240,7 @@ const login = [
     try {
       const { email, password } = req.body;
       const user = await userModel.loginUser(email, password);
-
-      // Generate JWT
       const token = jwt.sign({ userId: user.id, email: user.email }, JWT_SECRET, { expiresIn: '1h' });
-
       res.status(200).json({ token, userId: user.id });
     } catch (error) {
       res.status(401).json({ error: error.message });
@@ -225,6 +256,7 @@ module.exports = {
   deleteUser,
   setPreferences,
   addLike,
+  dislikeUser,
   getMatches,
   login
 };
