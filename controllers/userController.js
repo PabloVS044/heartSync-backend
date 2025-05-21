@@ -1,8 +1,11 @@
 const { body, param, query, validationResult } = require('express-validator');
 const userModel = require('../models/userModel');
 const jwt = require('jsonwebtoken');
+const { OAuth2Client } = require('google-auth-library');
 
 const JWT_SECRET = process.env.JWT_SECRET;
+const GOOGLE_CLIENT_ID = process.env.GOOGLE_CLIENT_ID;
+const googleClient = new OAuth2Client(GOOGLE_CLIENT_ID);
 
 const validateUser = [
   body('name').notEmpty().withMessage('Name is required'),
@@ -14,6 +17,18 @@ const validateUser = [
   body('gender').isIn(['male', 'female']).withMessage('Gender must be male or female'),
   body('interests').isArray().withMessage('Interests must be an array'),
   body('photos').isArray().withMessage('Photos must be an array'),
+  body('bio').optional().isLength({ max: 500 }).withMessage('Bio must be 500 characters or less'),
+  body('minAgePreference').optional().isInt({ min: 18 }).withMessage('Minimum age preference must be at least 18'),
+  body('maxAgePreference').optional().isInt({ min: 18 }).withMessage('Maximum age preference must be at least 18'),
+  body('internationalMode').optional().isBoolean().withMessage('International mode must be a boolean')
+];
+
+const validateProfileUpdate = [
+  body('age').optional().isInt({ min: 18 }).withMessage('Age must be at least 18'),
+  body('country').optional().notEmpty().withMessage('Country is required'),
+  body('gender').optional().isIn(['male', 'female']).withMessage('Gender must be male or female'),
+  body('interests').optional().isArray().withMessage('Interests must be an array'),
+  body('photos').optional().isArray().withMessage('Photos must be an array'),
   body('bio').optional().isLength({ max: 500 }).withMessage('Bio must be 500 characters or less'),
   body('minAgePreference').optional().isInt({ min: 18 }).withMessage('Minimum age preference must be at least 18'),
   body('maxAgePreference').optional().isInt({ min: 18 }).withMessage('Maximum age preference must be at least 18'),
@@ -42,6 +57,10 @@ const validateLogin = [
   body('password').notEmpty().withMessage('Password is required')
 ];
 
+const validateGoogleLogin = [
+  body('token').notEmpty().withMessage('Google token is required')
+];
+
 const validateUsers = [
   query('skip').optional().isInt({ min: 0 }).withMessage('Skip must be a non-negative integer'),
   query('limit').optional().isInt({ min: 1, max: 50 }).withMessage('Limit must be between 1 and 50')
@@ -57,6 +76,52 @@ const createUser = [
     try {
       const user = await userModel.createUser(req.body);
       res.status(201).json(user);
+    } catch (error) {
+      res.status(500).json({ error: error.message });
+    }
+  }
+];
+
+const googleLogin = [
+  ...validateGoogleLogin,
+  async (req, res) => {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      return res.status(400).json({ errors: errors.array() });
+    }
+    try {
+      const { token } = req.body;
+      const ticket = await googleClient.verifyIdToken({
+        idToken: token,
+        audience: GOOGLE_CLIENT_ID
+      });
+      const payload = ticket.getPayload();
+      const { sub: googleId, email, name, picture } = payload;
+
+      const user = await userModel.createOrUpdateGoogleUser({ googleId, email, name, picture });
+      const jwtToken = jwt.sign({ userId: user.id, email: user.email }, JWT_SECRET, { expiresIn: '1h' });
+
+      res.status(200).json({ token: jwtToken, userId: user.id });
+    } catch (error) {
+      res.status(401).json({ error: error.message });
+    }
+  }
+];
+
+const updateUserProfile = [
+  param('id').notEmpty().withMessage('User ID is required'),
+  ...validateProfileUpdate,
+  async (req, res) => {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      return res.status(400).json({ errors: errors.array() });
+    }
+    try {
+      const user = await userModel.updateUserProfile(req.params.id, req.body);
+      if (!user) {
+        return res.status(404).json({ error: 'User not found' });
+      }
+      res.json(user);
     } catch (error) {
       res.status(500).json({ error: error.message });
     }
@@ -219,6 +284,8 @@ const login = [
 
 module.exports = {
   createUser,
+  googleLogin,
+  updateUserProfile,
   getUser,
   getUsers,
   updateUser,

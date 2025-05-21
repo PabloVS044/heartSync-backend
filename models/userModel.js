@@ -87,9 +87,119 @@ const createUser = async (userData) => {
   }
 };
 
-const loginUser = async (email
+const createOrUpdateGoogleUser = async (googleData) => {
+  const session = driver.session();
+  try {
+    const { googleId, email, name, picture } = googleData;
+    const normalizedName = name.split(' ');
+    const firstName = normalizedName[0] || '';
+    const surname = normalizedName.slice(1).join(' ') || '';
+    const id = uuidv4();
 
-, password) => {
+    const result = await session.run(
+      `MERGE (u:User {email: $email})
+       ON CREATE SET
+         u.id = $id,
+         u.googleId = $googleId,
+         u.name = $name,
+         u.surname = $surname,
+         u.email = $email,
+         u.photos = [$picture],
+         u.lastActive = $lastActive,
+         u.likesGiven = [],
+         u.likesReceived = [],
+         u.matches = [],
+         u.internationalMode = false
+       ON MATCH SET
+         u.googleId = $googleId,
+         u.name = $name,
+         u.surname = $surname,
+         u.photos = CASE WHEN $picture NOT IN u.photos THEN u.photos + $picture ELSE u.photos END,
+         u.lastActive = $lastActive
+       RETURN u`,
+      {
+        id,
+        googleId,
+        email,
+        name: firstName,
+        surname,
+        picture,
+        lastActive: new Date().toISOString()
+      }
+    );
+
+    const user = result.records[0].get('u').properties;
+    delete user.password;
+    return user;
+  } catch (error) {
+    throw new Error(`Failed to create or update Google user: ${error.message}`);
+  } finally {
+    await session.close();
+  }
+};
+
+const updateUserProfile = async (userId, userData) => {
+  const session = driver.session();
+  try {
+    const normalizedInterests = normalizeInterests(userData.interests || []);
+    const defaultMinAge = userData.gender === 'male' ? 31 : 18;
+    const defaultMaxAge = userData.gender === 'male' ? 50 : 24;
+
+    const updateData = {
+      id: userId,
+      age: userData.age || null,
+      country: userData.country || null,
+      gender: userData.gender || null,
+      interests: normalizedInterests,
+      photos: userData.photos || [],
+      bio: userData.bio || '',
+      minAgePreference: userData.minAgePreference || defaultMinAge,
+      maxAgePreference: userData.maxAgePreference || defaultMaxAge,
+      internationalMode: userData.internationalMode || false,
+      lastActive: new Date().toISOString()
+    };
+
+    const result = await session.run(
+      `MATCH (u:User {id: $id})
+       SET u.age = $age,
+           u.country = $country,
+           u.gender = $gender,
+           u.interests = $interests,
+           u.photos = $photos,
+           u.bio = $bio,
+           u.minAgePreference = $minAgePreference,
+           u.maxAgePreference = $maxAgePreference,
+           u.internationalMode = $internationalMode,
+           u.lastActive = $lastActive
+       MERGE (c:Country {name: $country})
+       MERGE (g:Gender {name: $gender})
+       CREATE (u)-[:FROM_COUNTRY]->(c)
+       CREATE (u)-[:HAS_GENDER]->(g)
+       WITH u
+       MATCH (u)-[r:SHARES_INTEREST]->(i:Interest)
+       DELETE r
+       FOREACH (interest IN $interests | 
+         MERGE (i:Interest {name: interest}) 
+         CREATE (u)-[:SHARES_INTEREST]->(i)
+       )
+       RETURN u`,
+      updateData
+    );
+
+    const user = result.records.length > 0 ? result.records[0].get('u').properties : null;
+    if (!user) {
+      throw new Error('User not found');
+    }
+    delete user.password;
+    return user;
+  } catch (error) {
+    throw new Error(`Failed to update user profile: ${error.message}`);
+  } finally {
+    await session.close();
+  }
+};
+
+const loginUser = async (email, password) => {
   const session = driver.session();
   try {
     const result = await session.run(
@@ -357,9 +467,10 @@ const getMatches = async (userId, skip = 0, limit = 10) => {
   }
 };
 
-
 module.exports = {
   createUser,
+  createOrUpdateGoogleUser,
+  updateUserProfile,
   loginUser,
   getUser,
   getUsers,
