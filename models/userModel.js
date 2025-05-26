@@ -45,7 +45,8 @@ const createUser = async (userData) => {
         internationalMode: $internationalMode,
         likesGiven: $likesGiven,
         likesReceived: $likesReceived,
-        matches: $matches
+        matches: $matches,
+        dislikesGiven: $dislikesGiven
       })
       MERGE (c:Country {name: $country})
       MERGE (g:Gender {name: $gender})
@@ -74,7 +75,8 @@ const createUser = async (userData) => {
         internationalMode: userData.internationalMode || false,
         likesGiven: [],
         likesReceived: [],
-        matches: []
+        matches: [],
+        dislikesGiven: []
       }
     );
     const user = result.records[0].get('u').properties;
@@ -109,6 +111,7 @@ const createOrUpdateGoogleUser = async (googleData) => {
          u.likesGiven = [],
          u.likesReceived = [],
          u.matches = [],
+         u.dislikesGiven = [],
          u.internationalMode = false
        ON MATCH SET
          u.googleId = $googleId,
@@ -429,6 +432,7 @@ const getMatches = async (userId, skip = 0, limit = 10) => {
                      (potential)-[:FROM_COUNTRY]->(pc:Country)
       WHERE NOT potential.id IN u.matches
         AND NOT potential.id IN u.likesReceived
+        AND NOT potential.id IN u.dislikesGiven
         AND potential.age >= u.minAgePreference 
         AND potential.age <= u.maxAgePreference
         AND (u.internationalMode = true OR uc.name = pc.name)
@@ -462,6 +466,22 @@ const getMatches = async (userId, skip = 0, limit = 10) => {
   }
 };
 
+const dislikeUser = async (userId, targetUserId) => {
+  const session = driver.session();
+  try {
+    await session.run(
+      `MATCH (u:User {id: $userId}), (t:User {id: $targetUserId})
+       WHERE u <> t
+       SET u.dislikesGiven = coalesce(u.dislikesGiven, []) + $targetUserId
+       RETURN u`,
+      { userId, targetUserId }
+    );
+    return true;
+  } finally {
+    await session.close();
+  }
+};
+
 module.exports = {
   createUser,
   createOrUpdateGoogleUser,
@@ -473,5 +493,6 @@ module.exports = {
   deleteUser,
   setPreferences,
   addLike,
-  getMatches
+  getMatches,
+  dislikeUser
 };

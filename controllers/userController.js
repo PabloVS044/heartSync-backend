@@ -243,6 +243,25 @@ const addLike = [
   }
 ];
 
+const dislikeUser = [
+  ...validateLike,
+  async (req, res) => {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      return res.status(400).json({ errors: errors.array() });
+    }
+    try {
+      const success = await userModel.dislikeUser(req.params.id, req.params.targetId);
+      if (!success) {
+        return res.status(404).json({ error: 'User or target not found' });
+      }
+      res.status(200).json({ message: 'Dislike recorded' });
+    } catch (error) {
+      res.status(500).json({ error: error.message });
+    }
+  }
+];
+
 const getMatches = [
   ...validateMatches,
   async (req, res) => {
@@ -292,6 +311,7 @@ module.exports = {
   deleteUser,
   setPreferences,
   addLike,
+  dislikeUser,
   getMatches,
   login
 };

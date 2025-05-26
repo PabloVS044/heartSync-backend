@@ -13,5 +13,6 @@ router.delete('/:id', userController.deleteUser);
 router.post('/:id/preferences', userController.setPreferences);
 router.get('/:id/matches', userController.getMatches);
 router.post('/:id/like/:targetId', userController.addLike);
+router.post('/:id/dislike/:targetId', userController.dislikeUser);
 
 module.exports = router;
