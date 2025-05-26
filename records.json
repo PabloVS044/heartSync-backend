@@ -1,0 +1,577 @@
+[
+  {
+    "n": {
+      "identity": 0,
+      "labels": [
+        "User"
+      ],
+      "properties": {
+        "country": "Guatemala",
+        "lastActive": "2025-05-21T03:45:00.000Z",
+        "gender": "male",
+        "minAgePreference": 25.0,
+        "likesReceived": [],
+        "bio": "Amante de la aventura y la música.",
+        "maxAgePreference": 35.0,
+        "photos": [
+          "https://img.a.transfermarkt.technology/portrait/big/s_160936_5372_2012_1.jpg?lm=1"
+        ],
+        "matches": [],
+        "internationalMode": false,
+        "dislikesGiven": [],
+        "password": "$2b$10$1234567890abcdefg",
+        "surname": "Gómez",
+        "likesGiven": [],
+        "name": "Juan",
+        "id": "a1b2c3d4-1234-5678-9012-345678901234",
+        "interests": [
+          "música",
+          "viajes",
+          "deportes"
+        ],
+        "age": 18.0,
+        "email": "juan.gomez@example.com"
+      },
+      "elementId": "4:70a05d08-d9ae-4723-ad1c-179c901c94e3:0"
+    }
+  },
+  {
+    "n": {
+      "identity": 1,
+      "labels": [
+        "User"
+      ],
+      "properties": {
+        "country": "Guatemala",
+        "lastActive": "2025-05-21T03:45:05.000Z",
+        "gender": "male",
+        "minAgePreference": 25.0,
+        "likesReceived": [],
+        "bio": "Apasionado por la tecnología y el cine.",
+        "maxAgePreference": 35.0,
+        "photos": [
+          "https://static.wikia.nocookie.net/disneyypixar/images/5/5b/Carlos_L%C3%B3pez_Estrada.jpeg/revision/latest?cb=20210123031424&path-prefix=es"
+        ],
+        "matches": [],
+        "internationalMode": false,
+        "dislikesGiven": [],
+        "password": "$2b$10$1234567890abcdefg",
+        "surname": "López",
+        "likesGiven": [],
+        "name": "Carlos",
+        "id": "b2c3d4e5-2345-6789-0123-456789012345",
+        "interests": [
+          "tecnología",
+          "cine",
+          "lectura"
+        ],
+        "age": 19.0,
+        "email": "carlos.lopez@example.com"
+      },
+      "elementId": "4:70a05d08-d9ae-4723-ad1c-179c901c94e3:1"
+    }
+  },
+  {
+    "n": {
+      "identity": 2,
+      "labels": [
+        "User"
+      ],
+      "properties": {
+        "country": "Guatemala",
+        "lastActive": "2025-05-21T03:45:10.000Z",
+        "gender": "male",
+        "minAgePreference": 25.0,
+        "likesReceived": [],
+        "bio": "Fanático del fútbol y la naturaleza.",
+        "maxAgePreference": 35.0,
+        "photos": [
+          "https://lh4.googleusercontent.com/proxy/XysF70QVT3XPefYIL2RoonTYZgPgaGW_gwAtQjQpzz42iHavc-uH57mKLHKaH8ZmH6gnV4_mdqcaDOKwHY0nTp_PW4a0rSceDMOReOjtLXY2lxvUsPY1BxqASZEblYaPQ9n5mZ8WnzjF4-f9wQRLYhUXm8zRiK8qcOJzVPGYnIN6E4MWSQ"
+        ],
+        "matches": [],
+        "internationalMode": false,
+        "dislikesGiven": [],
+        "password": "$2b$10$1234567890abcdefg",
+        "surname": "Ramírez",
+        "likesGiven": [],
+        "name": "Miguel",
+        "id": "c3d4e5f6-3456-7890-1234-567890123456",
+        "interests": [
+          "deportes",
+          "naturaleza",
+          "fotografía"
+        ],
+        "age": 20.0,
+        "email": "miguel.ramirez@example.com"
+      },
+      "elementId": "4:70a05d08-d9ae-4723-ad1c-179c901c94e3:2"
+    }
+  },
+  {
+    "n": {
+      "identity": 3,
+      "labels": [
+        "User"
+      ],
+      "properties": {
+        "country": "Guatemala",
+        "lastActive": "2025-05-21T03:45:15.000Z",
+        "gender": "male",
+        "minAgePreference": 25.0,
+        "likesReceived": [],
+        "bio": "Me apasiona viajar y conocer culturas.",
+        "maxAgePreference": 35.0,
+        "photos": [
+          "https://media.licdn.com/dms/image/v2/C4D03AQEMY_8HDJ5OcA/profile-displayphoto-shrink_200_200/profile-displayphoto-shrink_200_200/0/1557718784209?e=2147483647&v=beta&t=_aORLcXVO4fMoIhCYJrQI2_ui26T8gudTmITNMFf3eA"
+        ],
+        "matches": [],
+        "internationalMode": false,
+        "dislikesGiven": [],
+        "password": "$2b$10$1234567890abcdefg",
+        "surname": "Martínez",
+        "likesGiven": [],
+        "name": "Pedro",
+        "id": "d4e5f6g7-4567-8901-2345-678901234567",
+        "interests": [
+          "viajes",
+          "idiomas",
+          "historia"
+        ],
+        "age": 21.0,
+        "email": "pedro.martinez@example.com"
+      },
+      "elementId": "4:70a05d08-d9ae-4723-ad1c-179c901c94e3:3"
+    }
+  },
+  {
+    "n": {
+      "identity": 4,
+      "labels": [
+        "User"
+      ],
+      "properties": {
+        "country": "Guatemala",
+        "lastActive": "2025-05-21T03:45:20.000Z",
+        "gender": "male",
+        "minAgePreference": 25.0,
+        "likesReceived": [],
+        "bio": "Amante del arte y la literatura.",
+        "maxAgePreference": 35.0,
+        "photos": [
+          "https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcRSV6RgptjSUCBdhVc_WrH7LLPA_8nLsxwrhg&s"
+        ],
+        "matches": [],
+        "internationalMode": false,
+        "dislikesGiven": [],
+        "password": "$2b$10$1234567890abcdefg",
+        "surname": "Pérez",
+        "likesGiven": [],
+        "name": "José",
+        "id": "e5f6g7h8-5678-9012-3456-789012345678",
+        "interests": [
+          "arte",
+          "lectura",
+          "pintura"
+        ],
+        "age": 22.0,
+        "email": "jose.perez@example.com"
+      },
+      "elementId": "4:70a05d08-d9ae-4723-ad1c-179c901c94e3:4"
+    }
+  },
+  {
+    "n": {
+      "identity": 5,
+      "labels": [
+        "User"
+      ],
+      "properties": {
+        "country": "Guatemala",
+        "lastActive": "2025-05-21T03:45:25.000Z",
+        "gender": "male",
+        "minAgePreference": 25.0,
+        "likesReceived": [],
+        "bio": "Explorador de la naturaleza.",
+        "maxAgePreference": 35.0,
+        "photos": [
+          "https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcSeQYduke4YbjTnu3Pl-zzWHncdCkUh5-7Rkg&s"
+        ],
+        "matches": [],
+        "internationalMode": false,
+        "dislikesGiven": [],
+        "password": "$2b$10$1234567890abcdefg",
+        "surname": "Rodríguez",
+        "likesGiven": [],
+        "name": "Luis",
+        "id": "f6g7h8i9-6789-0123-4567-890123456789",
+        "interests": [
+          "senderismo",
+          "naturaleza",
+          "fotografía"
+        ],
+        "age": 23.0,
+        "email": "luis.rodriguez@example.com"
+      },
+      "elementId": "4:70a05d08-d9ae-4723-ad1c-179c901c94e3:5"
+    }
+  },
+  {
+    "n": {
+      "identity": 6,
+      "labels": [
+        "User"
+      ],
+      "properties": {
+        "country": "Guatemala",
+        "lastActive": "2025-05-21T03:45:30.000Z",
+        "gender": "male",
+        "minAgePreference": 25.0,
+        "likesReceived": [],
+        "bio": "Apasionado por la música y el cine.",
+        "maxAgePreference": 35.0,
+        "photos": [
+          "https://www.soy502.com/sites/default/files/styles/full_node/public/2019/Feb/23/juandiego-hernandez.jpg"
+        ],
+        "matches": [],
+        "internationalMode": false,
+        "dislikesGiven": [],
+        "password": "$2b$10$1234567890abcdefg",
+        "surname": "Hernández",
+        "likesGiven": [],
+        "name": "Diego",
+        "id": "g7h8i9j0-7890-1234-5678-901234567890",
+        "interests": [
+          "música",
+          "cine",
+          "tecnología"
+        ],
+        "age": 24.0,
+        "email": "diego.hernandez@example.com"
+      },
+      "elementId": "4:70a05d08-d9ae-4723-ad1c-179c901c94e3:6"
+    }
+  },
+  {
+    "n": {
+      "identity": 7,
+      "labels": [
+        "User"
+      ],
+      "properties": {
+        "country": "Guatemala",
+        "lastActive": "2025-05-21T03:45:35.000Z",
+        "gender": "male",
+        "minAgePreference": 25.0,
+        "likesReceived": [],
+        "bio": "Buscador de nuevas experiencias.",
+        "maxAgePreference": 35.0,
+        "photos": [
+          "https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcR3R5vsjQSeUrxJtIf6w3RdBVSDdDHMRYTtiw&s"
+        ],
+        "matches": [],
+        "internationalMode": false,
+        "dislikesGiven": [],
+        "password": "$2b$10$1234567890abcdefg",
+        "surname": "García",
+        "likesGiven": [],
+        "name": "Ángel",
+        "id": "h8i9j0k1-8901-2345-6789-012345678901",
+        "interests": [
+          "viajes",
+          "fotografía",
+          "arte"
+        ],
+        "age": 25.0,
+        "email": "angel.garcia@example.com"
+      },
+      "elementId": "4:70a05d08-d9ae-4723-ad1c-179c901c94e3:7"
+    }
+  },
+  {
+    "n": {
+      "identity": 8,
+      "labels": [
+        "User"
+      ],
+      "properties": {
+        "country": "Guatemala",
+        "lastActive": "2025-05-21T03:45:40.000Z",
+        "gender": "male",
+        "minAgePreference": 25.0,
+        "likesReceived": [],
+        "bio": "Apasionado por la historia y la cultura.",
+        "maxAgePreference": 35.0,
+        "photos": [
+         "https://www.soy502.com/sites/default/files/styles/full_node/public/2025/Abr/11/accidentes_salama_futbolistas_oscar_morales_.png"
+        ],
+        "matches": [],
+        "internationalMode": false,
+        "dislikesGiven": [],
+        "password": "$2b$10$1234567890abcdefg",
+        "surname": "Morales",
+        "likesGiven": [],
+        "name": "Óscar",
+        "id": "i9j0k1l2-9012-3456-7890-123456789012",
+        "interests": [
+          "historia",
+          "lectura",
+          "música"
+        ],
+        "age": 18.0,
+        "email": "oscar.morales@example.com"
+      },
+      "elementId": "4:70a05d08-d9ae-4723-ad1c-179c901c94e3:8"
+    }
+  },
+  {
+    "n": {
+      "identity": 9,
+      "labels": [
+        "User"
+      ],
+      "properties": {
+        "country": "Guatemala",
+        "lastActive": "2025-05-21T03:45:45.000Z",
+        "gender": "male",
+        "minAgePreference": 25.0,
+        "likesReceived": [],
+        "bio": "Fanático del café y los libros.",
+        "maxAgePreference": 35.0,
+        "photos": [
+          "https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcS_KF9efpaOckVbSAQ4mpb2yz-nvEYO2LUPUnltCsNkUXF0P470z2a7aqS8DtYHNZD3ixk&usqp=CAU"
+        ],
+        "matches": [],
+        "internationalMode": false,
+        "dislikesGiven": [],
+        "password": "$2b$10$1234567890abcdefg",
+        "surname": "Reyes",
+        "likesGiven": [],
+        "name": "Marco",
+        "id": "j0k1l2m3-0123-4567-8901-234567890123",
+        "interests": [
+          "café",
+          "lectura",
+          "cine"
+        ],
+        "age": 19.0,
+        "email": "marco.reyes@example.com"
+      },
+      "elementId": "4:70a05d08-d9ae-4723-ad1c-179c901c94e3:9"
+    }
+  },
+  {
+    "n": {
+      "identity": 10,
+      "labels": [
+        "User"
+      ],
+      "properties": {
+        "country": "Guatemala",
+        "lastActive": "2025-05-21T03:45:50.000Z",
+        "gender": "male",
+        "minAgePreference": 25.0,
+        "likesReceived": [],
+        "bio": "Amante de la pintura y la naturaleza.",
+        "maxAgePreference": 35.0,
+        "photos": [
+          "https://www.findoctor.com/_next/image?url=https%3A%2F%2Fcdn.findoctor.com.co%2Fmedia%2F5474%2F123.jpg&w=3840&q=75"
+        ],
+        "matches": [],
+        "internationalMode": false,
+        "dislikesGiven": [],
+        "password": "$2b$10$1234567890abcdefg",
+        "surname": "Vásquez",
+        "likesGiven": [],
+        "name": "Roberto",
+        "id": "k1l2m3n4-1234-5678-9012-345678901234",
+        "interests": [
+          "pintura",
+          "naturaleza",
+          "fotografía"
+        ],
+        "age": 20.0,
+        "email": "roberto.vasquez@example.com"
+      },
+      "elementId": "4:70a05d08-d9ae-4723-ad1c-179c901c94e3:10"
+    }
+  },
+  {
+    "n": {
+      "identity": 11,
+      "labels": [
+        "User"
+      ],
+      "properties": {
+        "country": "Guatemala",
+        "lastActive": "2025-05-21T03:45:55.000Z",
+        "gender": "male",
+        "minAgePreference": 25.0,
+        "likesReceived": [],
+        "bio": "Explorador de nuevas ideas.",
+        "maxAgePreference": 35.0,
+        "photos": [
+          "https://media.licdn.com/dms/image/v2/D4D03AQEbAL19etEJZg/profile-displayphoto-shrink_200_200/profile-displayphoto-shrink_200_200/0/1712177583940?e=2147483647&v=beta&t=IQO3cPxb3FiEKccVlU9WCaWQTpHtn7z0wuRvxZGJxLU"
+        ],
+        "matches": [],
+        "internationalMode": false,
+        "dislikesGiven": [],
+        "password": "$2b$10$1234567890abcdefg",
+        "surname": "Castillo",
+        "likesGiven": [],
+        "name": "Javier",
+        "id": "l2m3n4o5-2345-6789-0123-456789012345",
+        "interests": [
+          "tecnología",
+          "música",
+          "viajes"
+        ],
+        "age": 21.0,
+        "email": "javier.castillo@example.com"
+      },
+      "elementId": "4:70a05d08-d9ae-4723-ad1c-179c901c94e3:11"
+    }
+  },
+  {
+    "n": {
+      "identity": 12,
+      "labels": [
+        "User"
+      ],
+      "properties": {
+        "country": "Guatemala",
+        "lastActive": "2025-05-21T03:46:00.000Z",
+        "gender": "male",
+        "minAgePreference": 25.0,
+        "likesReceived": [],
+        "bio": "Apasionado por la cocina y el arte.",
+        "maxAgePreference": 35.0,
+        "photos": [
+          "https://media.licdn.com/dms/image/v2/D4E03AQFikaa2AgBgcw/profile-displayphoto-shrink_200_200/profile-displayphoto-shrink_200_200/0/1675860462729?e=2147483647&v=beta&t=nRmVAa3ElEAlfMx_x_0OoX8SO8OJrtgxUCfr7xfE9Tc"
+        ],
+        "matches": [],
+        "internationalMode": false,
+        "dislikesGiven": [],
+        "password": "$2b$10$1234567890abcdefg",
+        "surname": "Ortiz",
+        "likesGiven": [],
+        "name": "Francisco",
+        "id": "m3n4o5p6-3456-7890-1234-567890123456",
+        "interests": [
+          "cocina",
+          "arte",
+          "lectura"
+        ],
+        "age": 22.0,
+        "email": "francisco.ortiz@example.com"
+      },
+      "elementId": "4:70a05d08-d9ae-4723-ad1c-179c901c94e3:12"
+    }
+  },
+  {
+    "n": {
+      "identity": 13,
+      "labels": [
+        "User"
+      ],
+      "properties": {
+        "country": "Guatemala",
+        "lastActive": "2025-05-21T03:46:05.000Z",
+        "gender": "male",
+        "minAgePreference": 25.0,
+        "likesReceived": [],
+        "bio": "Fanático del senderismo y la música.",
+        "maxAgePreference": 35.0,
+        "photos": [
+          "https://media.licdn.com/dms/image/v2/D4E03AQGNk1EXU9zbrA/profile-displayphoto-shrink_200_200/profile-displayphoto-shrink_200_200/0/1715995229168?e=2147483647&v=beta&t=TraKNhBFwxB_6YvwBO_eOeU4-xRARXX7BaZdJ5HhL-8"
+        ],
+        "matches": [],
+        "internationalMode": false,
+        "dislikesGiven": [],
+        "password": "$2b$10$1234567890abcdefg",
+        "surname": "Díaz",
+        "likesGiven": [],
+        "name": "Antonio",
+        "id": "n4o5p6q7-4567-8901-2345-678901234567",
+        "interests": [
+          "senderismo",
+          "música",
+          "fotografía"
+        ],
+        "age": 23.0,
+        "email": "antonio.diaz@example.com"
+      },
+      "elementId": "4:70a05d08-d9ae-4723-ad1c-179c901c94e3:13"
+    }
+  },
+  {
+    "n": {
+      "identity": 14,
+      "labels": [
+        "User"
+      ],
+      "properties": {
+        "country": "Guatemala",
+        "lastActive": "2025-05-21T03:46:10.000Z",
+        "gender": "male",
+        "minAgePreference": 25.0,
+        "likesReceived": [],
+        "bio": "Amante del cine y los idiomas.",
+        "maxAgePreference": 35.0,
+        "photos": [
+          "https://media.licdn.com/dms/image/v2/C4D03AQHz4YEBWySljA/profile-displayphoto-shrink_200_200/profile-displayphoto-shrink_200_200/0/1591402466862?e=2147483647&v=beta&t=HeF3fku9Jl-VyvIqJuk7lu5yKGU0DxXt4GOL7zK2R6g"
+        ],
+        "matches": [],
+        "internationalMode": false,
+        "dislikesGiven": [],
+        "password": "$2b$10$1234567890abcdefg",
+        "surname": "Ruiz",
+        "likesGiven": [],
+        "name": "Manuel",
+        "id": "o5p6q7r8-5678-9012-3456-789012345678",
+        "interests": [
+          "cine",
+          "idiomas",
+          "viajes"
+        ],
+        "age": 24.0,
+        "email": "manuel.ruiz@example.com"
+      },
+      "elementId": "4:70a05d08-d9ae-4723-ad1c-179c901c94e3:14"
+    }
+  },
+  {
+    "n": {
+      "identity": 15,
+      "labels": [
+        "User"
+      ],
+      "properties": {
+        "country": "Guatemala",
+        "lastActive": "2025-05-21T03:46:15.000Z",
+        "gender": "female",
+        "minAgePreference": 18.0,
+        "likesReceived": [],
+        "bio": "Apasionada por el arte y la cultura.",
+        "maxAgePreference": 30.0,
+        "photos": [
+          "mhttps://www.plazapublica.com.gt/sites/default/files/pictures/picture-33364-1558370391.jpg"
+        ],
+        "matches": [],
+        "internationalMode": false,
+        "dislikesGiven": [],
+        "password": "$2b$10$1234567890abcdefg",
+        "surname": "López",
+        "likesGiven": [],
+        "name": "María",
+        "id": "p6q7r8s9-6789-0123-4567-890123456789",
+        "interests": [
+          "arte",
+          "lectura",
+          "viajes"
+        ],
+        "age": 30.0,
+        "email": "maria.lopez@example.com"
+      },
+      "elementId": "4:70a05d08-d9ae-4723-ad1c-179c901c94e3:15"
+    }
+  }]
