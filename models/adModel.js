@@ -122,7 +122,7 @@ const getAdsForUser = async (userId, skip = 0, limit = 10) => {
     const result = await session.run(
       `MATCH (u:User {id: $userId})-[:SHARES_INTEREST]->(i:Interest)<-[:TARGETS_INTEREST]-(a:Advertisement)
        RETURN a, count(i) AS sharedInterests
-       ORDER BY sharedInterests DESC, a.createdAt DESC
+       ORDER BY rand()
        SKIP $skip
        LIMIT $limit`,
       { userId, skip: neo4j.int(skip), limit: neo4j.int(limit) }

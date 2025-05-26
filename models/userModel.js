@@ -446,12 +446,7 @@ const getMatches = async (userId, skip = 0, limit = 10) => {
           WHEN liked IS NOT NULL THEN {user: liked, type: 'liked', sharedInterests: 0}
           ELSE {user: potential, type: 'potential', sharedInterests: sharedInterests}
         END AS match
-      ORDER BY 
-        CASE 
-          WHEN matched IS NOT NULL THEN 1
-          WHEN liked IS NOT NULL THEN 2
-          ELSE 3
-        END, sharedInterests DESC
+      ORDER BY rand()
       SKIP $skip
       LIMIT $limit
       `,
