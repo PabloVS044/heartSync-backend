@@ -112,12 +112,22 @@ const createOrUpdateGoogleUser = async (googleData) => {
          u.likesReceived = [],
          u.matches = [],
          u.dislikesGiven = [],
-         u.internationalMode = false
+         u.internationalMode = false,
+         u.interests = [],
+         u.bio = '',
+         u.age = null,
+         u.country = null,
+         u.gender = null,
+         u.minAgePreference = 18,
+         u.maxAgePreference = 100
        ON MATCH SET
          u.googleId = $googleId,
          u.name = $name,
          u.surname = $surname,
-         u.photos = CASE WHEN $picture NOT IN u.photos THEN u.photos + $picture ELSE u.photos END,
+         u.photos = CASE 
+                     WHEN $picture IN coalesce(u.photos, []) THEN u.photos 
+                     ELSE coalesce(u.photos, []) + $picture 
+                    END,
          u.lastActive = $lastActive
        RETURN u`,
       {
@@ -132,7 +142,7 @@ const createOrUpdateGoogleUser = async (googleData) => {
     );
 
     const user = result.records[0].get('u').properties;
-    delete user.password;
+    delete user.password; // Asegurarse de no devolver la contraseña
     return user;
   } catch (error) {
     throw new Error(`Failed to create or update Google user: ${error.message}`);
@@ -142,6 +152,8 @@ const createOrUpdateGoogleUser = async (googleData) => {
 };
 
 const updateUserProfile = async (userId, userData) => {
+  console.log(userId)
+  console.log(userData)
   const session = driver.session();
   try {
     const normalizedInterests = normalizeInterests(userData.interests || []);
@@ -163,29 +175,31 @@ const updateUserProfile = async (userId, userData) => {
     };
 
     const result = await session.run(
-      `MATCH (u:User {id: $id})
-       SET u.age = $age,
-           u.country = $country,
-           u.gender = $gender,
-           u.interests = $interests,
-           u.photos = $photos,
-           u.bio = $bio,
-           u.minAgePreference = $minAgePreference,
-           u.maxAgePreference = $maxAgePreference,
-           u.internationalMode = $internationalMode,
-           u.lastActive = $lastActive
-       MERGE (c:Country {name: $country})
-       MERGE (g:Gender {name: $gender})
-       CREATE (u)-[:FROM_COUNTRY]->(c)
-       CREATE (u)-[:HAS_GENDER]->(g)
-       WITH u
-       MATCH (u)-[r:SHARES_INTEREST]->(i:Interest)
-       DELETE r
-       FOREACH (interest IN $interests | 
-         MERGE (i:Interest {name: interest}) 
-         CREATE (u)-[:SHARES_INTEREST]->(i)
-       )
-       RETURN u`,
+      `MATCH (u:User {id: $id}) 
+SET u.age = $age,
+    u.country = $country,
+    u.gender = $gender,
+    u.interests = $interests,
+    u.photos = $photos,
+    u.bio = $bio,
+    u.minAgePreference = $minAgePreference,
+    u.maxAgePreference = $maxAgePreference,
+    u.internationalMode = $internationalMode,
+    u.lastActive = $lastActive
+MERGE (c:Country {name: $country})
+MERGE (g:Gender {name: $gender})
+CREATE (u)-[:FROM_COUNTRY]->(c)
+CREATE (u)-[:HAS_GENDER]->(g)
+WITH u
+MATCH (u)-[r:SHARES_INTEREST]->(i:Interest)
+DELETE r
+WITH u, $interests AS interests
+FOREACH (interest IN interests | 
+  MERGE (i:Interest {name: interest}) 
+  CREATE (u)-[:SHARES_INTEREST]->(i)
+)
+RETURN u
+`,
       updateData
     );
 
@@ -229,6 +243,7 @@ const loginUser = async (email, password) => {
 };
 
 const getUser = async (id) => {
+  console.log(`Fetching user with ID: ${id}`);
   const session = driver.session();
   try {
     const result = await session.run(
@@ -407,10 +422,11 @@ const getMatches = async (userId, skip = 0, limit = 10) => {
       MATCH (u:User {id: $userId})-[:HAS_GENDER]->(g:Gender)
       MATCH (u)-[:FROM_COUNTRY]->(uc:Country)
       MATCH (u)-[:SHARES_INTEREST]->(i:Interest)
+      WITH u, uc, g, collect(i.name) AS userInterests, count(i) AS userInterestCount
 
       MATCH (potential:User)-[:HAS_GENDER]->(pg:Gender),
             (potential)-[:FROM_COUNTRY]->(pc:Country),
-            (potential)-[:SHARES_INTEREST]->(i)
+            (potential)-[:SHARES_INTEREST]->(pi:Interest)
       WHERE potential.id <> u.id
         AND NOT potential.id IN u.matches
         AND NOT potential.id IN u.likesReceived
@@ -418,14 +434,31 @@ const getMatches = async (userId, skip = 0, limit = 10) => {
         AND NOT potential.id IN u.likesGiven
         AND potential.age >= u.minAgePreference
         AND potential.age <= u.maxAgePreference
+        AND u.age >= potential.minAgePreference
+        AND u.age <= potential.maxAgePreference
         AND (u.internationalMode = true OR uc.name = pc.name)
-        AND ((g.name = 'male' AND pg.name = 'female' AND potential.age > 30)
-          OR (g.name = 'female' AND pg.name = 'male' AND potential.age < 25))
-      
-      WITH potential, count(i) AS sharedInterests
+        AND (potential.internationalMode = true OR pc.name = uc.name)
+        AND (
+          (g.name = 'male' AND pg.name = 'female') OR
+          (g.name = 'female' AND pg.name = 'male')
+        )
+
+      WITH potential, userInterests, userInterestCount, collect(pi.name) AS potentialInterests
+      WITH potential, 
+           size([x IN potentialInterests WHERE x IN userInterests]) AS sharedInterestCount,
+           userInterestCount
+      WITH potential, 
+           sharedInterestCount, 
+           (sharedInterestCount * 100.0 / userInterestCount) AS matchPercentage
+
       RETURN 
-        {user: potential, type: 'potential', sharedInterests: sharedInterests} AS match
-      ORDER BY sharedInterests DESC
+        {
+          user: potential, 
+          type: 'potential', 
+          sharedInterests: sharedInterestCount,
+          matchPercentage: matchPercentage
+        } AS match
+      ORDER BY matchPercentage DESC, sharedInterestCount DESC
       SKIP $skip
       LIMIT $limit
       `,
@@ -435,7 +468,8 @@ const getMatches = async (userId, skip = 0, limit = 10) => {
     return result.records.map(record => ({
       ...record.get('match').user.properties,
       matchType: record.get('match').type,
-      sharedInterests: record.get('match').sharedInterests.low || 0
+      sharedInterests: record.get('match').sharedInterests.low || 0,
+      matchPercentage: Math.round(record.get('match').matchPercentage * 100) / 100
     }));
   } finally {
     await session.close();
@@ -458,6 +492,25 @@ const dislikeUser = async (userId, targetUserId) => {
   }
 };
 
+const unmatchUser = async (userId, targetUserId) => {
+  const session = driver.session();
+  try {
+    await session.run(
+      `MATCH (u:User {id: $userId}), (t:User {id: $targetUserId})
+       SET u.matches = [x IN u.matches WHERE x <> $targetUserId],
+           t.matches = [x IN t.matches WHERE x <> $userId]
+       MATCH (u)-[r:MATCHED]-(t)
+       DELETE r
+       RETURN u, t`,
+      { userId, targetUserId }
+    );
+    return true;
+  } finally {
+    await session.close();
+  }
+};
+
+
 module.exports = {
   createUser,
   createOrUpdateGoogleUser,
@@ -470,5 +523,6 @@ module.exports = {
   setPreferences,
   addLike,
   getMatches,
-  dislikeUser
+  dislikeUser,
+  unmatchUser
 };

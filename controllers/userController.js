@@ -129,8 +129,8 @@ const updateUserProfile = [
 ];
 
 const getUser = [
-  param('id').notEmpty().withMessage('User ID is required'),
   async (req, res) => {
+    console.log("HOLAAAAA")
     const errors = validationResult(req);
     if (!errors.isEmpty()) {
       return res.status(400).json({ errors: errors.array() });
@@ -301,6 +301,25 @@ const login = [
   }
 ];
 
+const unmatchUser = [
+  ...validateLike,
+  async (req, res) => {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      return res.status(400).json({ errors: errors.array() });
+    }
+    try {
+      const success = await userModel.unmatchUser(req.params.id, req.params.targetId);
+      if (!success) {
+        return res.status(404).json({ error: 'User or match not found' });
+      }
+      res.status(200).json({ message: 'Unmatch successful' });
+    } catch (error) {
+      res.status(500).json({ error: error.message });
+    }
+  }
+];
+
 module.exports = {
   createUser,
   googleLogin,
@@ -313,5 +332,6 @@ module.exports = {
   addLike,
   dislikeUser,
   getMatches,
-  login
+  login,
+  unmatchUser
 };

@@ -1,6 +1,7 @@
 const driver = require('../config/db');
 const { v4: uuidv4 } = require('uuid');
 const neo4j = require('neo4j-driver');
+const chatModel = require('./chatModel'); // Importar chatModel
 
 const createMatch = async (userId1, userId2) => {
   const session = driver.session();
@@ -20,10 +21,15 @@ const createMatch = async (userId1, userId2) => {
       { matchId, userId1, userId2, createdAt }
     );
     const record = result.records[0];
+    
+    // Crear un chat para el nuevo match
+    const chat = await chatModel.createChat(matchId);
+
     return {
       match: record.get('m').properties,
       user1: record.get('u1').properties,
-      user2: record.get('u2').properties
+      user2: record.get('u2').properties,
+      chat: chat // Incluir el chat creado en la respuesta
     };
   } catch (error) {
     throw error;
@@ -38,7 +44,8 @@ const getMatch = async (matchId) => {
     const result = await session.run(
       `MATCH (m:Match {id: $matchId})
        MATCH (u:User)-[:HAS_MATCH]->(m)
-       RETURN m, collect(u) AS users`,
+       OPTIONAL MATCH (m)-[:HAS_CHAT]->(c:Chat)
+       RETURN m, collect(u) AS users, c`,
       { matchId }
     );
     if (result.records.length === 0) return null;
@@ -49,7 +56,8 @@ const getMatch = async (matchId) => {
         const properties = user.properties;
         delete properties.password;
         return properties;
-      })
+      }),
+      chat: record.get('c') ? record.get('c').properties : null
     };
   } finally {
     await session.close();
@@ -63,7 +71,8 @@ const getMatchesForUser = async (userId, skip = 0, limit = 10) => {
       `MATCH (u:User {id: $userId})-[:HAS_MATCH]->(m:Match)
        MATCH (other:User)-[:HAS_MATCH]->(m)
        WHERE other <> u
-       RETURN m, other
+       OPTIONAL MATCH (m)-[:HAS_CHAT]->(c:Chat)
+       RETURN m, other, c
        ORDER BY m.createdAt DESC
        SKIP $skip
        LIMIT $limit`,
@@ -73,7 +82,8 @@ const getMatchesForUser = async (userId, skip = 0, limit = 10) => {
       const match = record.get('m').properties;
       const otherUser = record.get('other').properties;
       delete otherUser.password;
-      return { match, otherUser };
+      const chat = record.get('c') ? record.get('c').properties : null;
+      return { match, otherUser, chat };
     });
   } finally {
     await session.close();

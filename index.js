@@ -2,6 +2,7 @@ const express = require('express');
 const cors = require('cors');
 const http = require('http');
 const { Server } = require('socket.io');
+const morgan = require('morgan'); // <--- aquí lo importas
 const userRoutes = require('./routes/userRoutes');
 const adRoutes = require('./routes/adRoutes');
 const chatRoutes = require('./routes/chatRoutes');
@@ -29,6 +30,7 @@ class HeartSyncServer {
   middlewares() {
     this.app.use(cors());
     this.app.use(express.json());
+    this.app.use(morgan('dev')); // <--- aquí lo integras
     this.app.use(express.static('public'));
     this.app.use((req, res, next) => {
       res.set('Cache-Control', 'no-store');
