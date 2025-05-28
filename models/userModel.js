@@ -382,33 +382,85 @@ const setPreferences = async (userId, minAge, maxAge) => {
 const addLike = async (userId, targetUserId) => {
   const session = driver.session();
   try {
-    const result = await session.run(
-      `MATCH (u:User {id: $userId})-[:HAS_GENDER]->(ug:Gender),
-             (t:User {id: $targetUserId})-[:HAS_GENDER]->(tg:Gender)
-       WHERE u <> t
-         AND ((ug.name = 'male' AND tg.name = 'female') OR (ug.name = 'female' AND tg.name = 'male'))
-       SET u.likesGiven = coalesce(u.likesGiven, []) + $targetUserId,
-           t.likesReceived = coalesce(t.likesReceived, []) + $userId
-       WITH u, t
-       WHERE $targetUserId IN u.likesReceived AND $userId IN t.likesGiven
-       SET u.matches = coalesce(u.matches, []) + $targetUserId,
-           t.matches = coalesce(t.matches, []) + $userId
-       RETURN u, t, EXISTS((u)-[:MATCHED]->(t)) AS isMatched`,
+    // Validar que ambos usuarios existan
+    const checkUsers = await session.run(
+      `MATCH (u:User {id: $userId}), (t:User {id: $targetUserId})
+       RETURN u, t`,
       { userId, targetUserId }
     );
+    if (checkUsers.records.length === 0) {
+      throw new Error('User or target user not found');
+    }
+
+    const matchId = uuidv4();
+    const createdAt = new Date().toISOString();
+    const result = await session.run(
+      `
+      MATCH (u:User {id: $userId})-[:HAS_GENDER]->(ug:Gender),
+            (t:User {id: $targetUserId})-[:HAS_GENDER]->(tg:Gender)
+      WHERE u <> t
+        AND ((ug.name = 'male' AND tg.name = 'female') OR (ug.name = 'female' AND tg.name = 'male'))
+      SET u.likesGiven = coalesce(u.likesGiven, []) + $targetUserId,
+          t.likesReceived = coalesce(t.likesReceived, []) + $userId
+      WITH u, t
+      OPTIONAL MATCH (u)-[:SHARES_INTEREST]->(i:Interest)<-[:SHARES_INTEREST]-(t)
+      WITH u, t, collect(i.name) AS sharedInterests
+      WHERE $targetUserId IN u.likesReceived AND $userId IN t.likesGiven
+      CREATE (m:Match {
+        id: $matchId,
+        userId1: $userId,
+        userId2: $targetUserId,
+        user1Name: u.name,
+        user2Name: t.name,
+        sharedInterests: sharedInterests,
+        createdAt: $createdAt
+      })
+      CREATE (u)-[:HAS_MATCH]->(m)
+      CREATE (t)-[:HAS_MATCH]->(m)
+      SET u.matches = coalesce(u.matches, []) + $targetUserId,
+          t.matches = coalesce(t.matches, []) + $userId,
+          u.likesGiven = [x IN u.likesGiven WHERE x <> $targetUserId],
+          t.likesGiven = [x IN t.likesGiven WHERE x <> $userId],
+          u.likesReceived = [x IN u.likesReceived WHERE x <> $targetUserId],
+          t.likesReceived = [x IN t.likesReceived WHERE x <> $userId]
+      RETURN u, t, m, EXISTS((u)-[:HAS_MATCH]->(m)) AS isMatched
+      `,
+      { userId, targetUserId, matchId, createdAt }
+    );
+
+    if (result.records.length === 0) {
+      return {
+        user: checkUsers.records[0].get('u').properties,
+        target: checkUsers.records[0].get('t').properties,
+        isMatched: false,
+        match: null,
+        chat: null
+      };
+    }
+
     const record = result.records[0];
     const isMatched = record.get('isMatched');
-    
+
+    let chat = null;
     if (isMatched) {
-      const match = await matchModel.createMatch(userId, targetUserId);
-      await chatModel.createChat(match.match.id);
+      try {
+        chat = await chatModel.createChat(matchId);
+      } catch (chatError) {
+        console.error(`Failed to create chat for match ${matchId}:`, chatError.message);
+        throw new Error('Match created but chat creation failed');
+      }
     }
-    
+
     return {
       user: record.get('u').properties,
       target: record.get('t').properties,
-      isMatched
+      isMatched,
+      match: isMatched ? record.get('m').properties : null,
+      chat
     };
+  } catch (error) {
+    console.error(`Error in addLike for user ${userId} to ${targetUserId}:`, error.message);
+    throw error;
   } finally {
     await session.close();
   }
@@ -429,7 +481,6 @@ const getMatches = async (userId, skip = 0, limit = 10) => {
             (potential)-[:SHARES_INTEREST]->(pi:Interest)
       WHERE potential.id <> u.id
         AND NOT potential.id IN u.matches
-        AND NOT potential.id IN u.likesReceived
         AND NOT potential.id IN u.dislikesGiven
         AND NOT potential.id IN u.likesGiven
         AND potential.age >= u.minAgePreference
@@ -496,20 +547,24 @@ const unmatchUser = async (userId, targetUserId) => {
   const session = driver.session();
   try {
     await session.run(
-      `MATCH (u:User {id: $userId}), (t:User {id: $targetUserId})
-       SET u.matches = [x IN u.matches WHERE x <> $targetUserId],
-           t.matches = [x IN t.matches WHERE x <> $userId]
-       MATCH (u)-[r:MATCHED]-(t)
-       DELETE r
-       RETURN u, t`,
+      `
+      MATCH (u:User {id: $userId})-[:HAS_MATCH]->(m:Match)<-[:HAS_MATCH]-(t:User {id: $targetUserId})
+      OPTIONAL MATCH (m)-[:HAS_CHAT]->(c:Chat)
+      SET u.matches = [x IN u.matches WHERE x <> $targetUserId],
+          t.matches = [x IN t.matches WHERE x <> $userId]
+      DETACH DELETE m, c
+      RETURN true
+      `,
       { userId, targetUserId }
     );
     return true;
+  } catch (error) {
+    console.error(`Error unmatching user ${userId} and ${targetUserId}:`, error.message);
+    throw error;
   } finally {
     await session.close();
   }
 };
-
 
 module.exports = {
   createUser,

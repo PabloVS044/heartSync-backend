@@ -32,7 +32,8 @@ const addMessage = async (chatId, senderId, content) => {
       id: uuidv4(),
       senderId,
       content,
-      timestamp: new Date().toISOString()
+      timestamp: new Date().toISOString(),
+      isRead: false // Añadir isRead
     };
     const result = await session.run(
       `MATCH (c:Chat {id: $chatId})
@@ -68,7 +69,7 @@ const getChatsForUser = async (userId) => {
     const result = await session.run(
       `MATCH (u:User {id: $userId})-[:HAS_MATCH]->(m:Match)-[:HAS_CHAT]->(c:Chat)
        MATCH (other:User)-[:HAS_MATCH]->(m)
-       WHERE other <> u
+       WHERE other.id <> u.id
        RETURN c, other`,
       { userId }
     );
@@ -83,9 +84,31 @@ const getChatsForUser = async (userId) => {
   }
 };
 
+const markMessagesAsRead = async (chatId, userId) => {
+  const session = driver.session();
+  try {
+    const result = await session.run(
+      `MATCH (c:Chat {id: $chatId})
+       WITH c, [msg IN c.messages | 
+         CASE WHEN msg.senderId <> $userId AND NOT msg.isRead
+              THEN {id: msg.id, senderId: msg.senderId, content: msg.content, timestamp: msg.timestamp, isRead: true}
+              ELSE msg END] AS updatedMessages
+       SET c.messages = updatedMessages
+       RETURN c`,
+      { chatId, userId }
+    );
+    return result.records.length > 0 ? result.records[0].get('c').properties : null;
+  } catch (error) {
+    throw error;
+  } finally {
+    await session.close();
+  }
+};
+
 module.exports = {
   createChat,
   addMessage,
   getChat,
-  getChatsForUser
+  getChatsForUser,
+  markMessagesAsRead
 };

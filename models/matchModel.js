@@ -10,26 +10,33 @@ const createMatch = async (userId1, userId2) => {
     const createdAt = new Date().toISOString();
     const result = await session.run(
       `MATCH (u1:User {id: $userId1}), (u2:User {id: $userId2})
+       MATCH (u1)-[:SHARES_INTEREST]->(i:Interest)<-[:SHARES_INTEREST]-(u2)
        WHERE u1 <> u2
        CREATE (m:Match {
          id: $matchId,
+         userId1: $userId1,
+         userId2: $userId2,
+         user1Name: u1.name,
+         user2Name: u2.name,
+         sharedInterests: collect(i.name),
          createdAt: $createdAt
        })
        CREATE (u1)-[:HAS_MATCH]->(m)
        CREATE (u2)-[:HAS_MATCH]->(m)
+       SET u1.matches = coalesce(u1.matches, []) + $userId2,
+           u2.matches = coalesce(u2.matches, []) + $userId1
        RETURN m, u1, u2`,
       { matchId, userId1, userId2, createdAt }
     );
     const record = result.records[0];
     
-    // Crear un chat para el nuevo match
     const chat = await chatModel.createChat(matchId);
 
     return {
       match: record.get('m').properties,
       user1: record.get('u1').properties,
       user2: record.get('u2').properties,
-      chat: chat // Incluir el chat creado en la respuesta
+      chat
     };
   } catch (error) {
     throw error;

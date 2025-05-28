@@ -8,6 +8,10 @@ const validateMessage = [
   body('content').notEmpty().withMessage('Message content is required'),
 ];
 
+const validateReadMessages = [
+  body('userId').notEmpty().withMessage('User ID is required'),
+];
+
 router.get('/:chatId', chatController.getChat);
 router.get('/user/:userId', chatController.getChatsForUser);
 router.post('/:chatId/messages', validateMessage, async (req, res) => {
@@ -23,5 +27,7 @@ router.post('/:chatId/messages', validateMessage, async (req, res) => {
     res.status(500).json({ error: error.message });
   }
 });
+
+router.patch('/:chatId/messages/read', validateReadMessages, chatController.markMessagesAsRead);
 
 module.exports = router;
