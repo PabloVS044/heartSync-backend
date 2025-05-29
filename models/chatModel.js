@@ -122,18 +122,47 @@ const getChatsForUser = async (userId) => {
 const markMessagesAsRead = async (chatId, userId) => {
   const session = driver.session();
   try {
+    // Fetch the chat
     const result = await session.run(
       `MATCH (c:Chat {id: $chatId})
-       WITH c, [msg IN c.messages | 
-         CASE WHEN msg.senderId <> $userId AND NOT msg.isRead
-              THEN {id: msg.id, senderId: msg.senderId, content: msg.content, image: msg.image, timestamp: msg.timestamp, isRead: true}
-              ELSE msg END] AS updatedMessages
-       SET c.messages = updatedMessages
        RETURN c`,
-      { chatId, userId }
+      { chatId }
     );
-    return result.records.length > 0 ? result.records[0].get('c').properties : null;
+
+    if (!result.records.length) {
+      return null;
+    }
+
+    const chat = result.records[0].get('c').properties;
+    // Parse JSON strings to objects
+    let messages = chat.messages.map(json => JSON.parse(json));
+
+    // Update messages where senderId is not userId and isRead is false
+    messages = messages.map(msg => {
+      if (msg.senderId !== userId && !msg.isRead) {
+        return { ...msg, isRead: true };
+      }
+      return msg;
+    });
+
+    // Serialize messages back to JSON strings
+    const updatedMessagesJson = messages.map(msg => JSON.stringify(msg));
+
+    // Update the chat node with the new messages array
+    const updateResult = await session.run(
+      `MATCH (c:Chat {id: $chatId})
+       SET c.messages = $updatedMessagesJson
+       RETURN c`,
+      { chatId, updatedMessagesJson }
+    );
+
+    const updatedChat = updateResult.records[0].get('c').properties;
+    // Parse messages back to objects for the response
+    updatedChat.messages = updatedChat.messages.map(json => JSON.parse(json));
+
+    return updatedChat;
   } catch (error) {
+    console.error('Error in markMessagesAsRead:', error.message, error.stack);
     throw error;
   } finally {
     await session.close();
