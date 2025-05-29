@@ -18,7 +18,6 @@ const createUser = async (userData) => {
     const defaultMaxAge = userData.gender === 'male' ? 50 : 24;
     const normalizedInterests = normalizeInterests(userData.interests || []);
     
-    // Hash password if provided
     let hashedPassword = '';
     if (userData.password) {
       hashedPassword = await bcrypt.hash(userData.password, SALT_ROUNDS);
@@ -142,7 +141,7 @@ const createOrUpdateGoogleUser = async (googleData) => {
     );
 
     const user = result.records[0].get('u').properties;
-    delete user.password; // Asegurarse de no devolver la contraseña
+    delete user.password;
     return user;
   } catch (error) {
     throw new Error(`Failed to create or update Google user: ${error.message}`);
@@ -382,7 +381,6 @@ const setPreferences = async (userId, minAge, maxAge) => {
 const addLike = async (userId, targetUserId) => {
   const session = driver.session();
   try {
-    // Validar que ambos usuarios existan
     const checkUsers = await session.run(
       `MATCH (u:User {id: $userId}), (t:User {id: $targetUserId})
        RETURN u, t`,
@@ -418,11 +416,7 @@ const addLike = async (userId, targetUserId) => {
       CREATE (u)-[:HAS_MATCH]->(m)
       CREATE (t)-[:HAS_MATCH]->(m)
       SET u.matches = coalesce(u.matches, []) + $targetUserId,
-          t.matches = coalesce(t.matches, []) + $userId,
-          u.likesGiven = [x IN u.likesGiven WHERE x <> $targetUserId],
-          t.likesGiven = [x IN t.likesGiven WHERE x <> $userId],
-          u.likesReceived = [x IN u.likesReceived WHERE x <> $targetUserId],
-          t.likesReceived = [x IN t.likesReceived WHERE x <> $userId]
+          t.matches = coalesce(t.matches, []) + $userId
       RETURN u, t, m, EXISTS((u)-[:HAS_MATCH]->(m)) AS isMatched
       `,
       { userId, targetUserId, matchId, createdAt }
@@ -527,6 +521,51 @@ const getMatches = async (userId, skip = 0, limit = 10) => {
   }
 };
 
+const getMatchesUser = async (userId, skip = 0, limit = 10) => {
+  const session = driver.session();
+  try {
+    const result = await session.run(
+      `
+      MATCH (u:User {id: $userId})-[:HAS_MATCH]->(m:Match)
+      MATCH (other:User)-[:HAS_MATCH]->(m)
+      WHERE other.id <> u.id
+      OPTIONAL MATCH (m)-[:HAS_CHAT]->(c:Chat)
+      MATCH (other)-[:SHARES_INTEREST]->(i:Interest)
+      WITH m, other, collect(i.name) AS interests, c
+      RETURN m, other, interests, c
+      ORDER BY m.createdAt DESC
+      SKIP $skip
+      LIMIT $limit
+      `,
+      { userId, skip: neo4j.int(skip), limit: neo4j.int(limit) }
+    );
+
+    return result.records.map(record => {
+      const match = record.get('m').properties;
+      const otherUser = record.get('other').properties;
+      const chat = record.get('c') ? record.get('c').properties : { id: null, messages: [] };
+      delete otherUser.password;
+
+      const isUser1 = match.userId1 === userId;
+      const otherUserName = isUser1 ? match.user2Name : match.user1Name;
+      const otherUserId = isUser1 ? match.userId2 : match.userId1;
+
+      return {
+        match,
+        otherUser: {
+          ...otherUser,
+          name: otherUserName,
+          id: otherUserId,
+          interests: record.get('interests')
+        },
+        chat
+      };
+    });
+  } finally {
+    await session.close();
+  }
+};
+
 const dislikeUser = async (userId, targetUserId) => {
   const session = driver.session();
   try {
@@ -578,6 +617,7 @@ module.exports = {
   setPreferences,
   addLike,
   getMatches,
+  getMatchesUser,
   dislikeUser,
   unmatchUser
 };

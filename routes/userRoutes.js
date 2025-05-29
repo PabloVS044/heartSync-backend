@@ -13,6 +13,7 @@ router.put('/:id', userController.updateUser);
 router.delete('/:id', userController.deleteUser);
 router.post('/:id/preferences', userController.setPreferences);
 router.get('/:id/matches', userController.getMatches);
+router.get('/:id/matchesUser', userController.getMatchesUser);
 router.post('/:id/like/:targetId', userController.addLike);
 router.post('/:id/dislike/:targetId', userController.dislikeUser);
 router.post('/:id/unmatch/:targetId', userController.unmatchUser);

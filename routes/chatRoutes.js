@@ -1,12 +1,9 @@
 const express = require('express');
 const router = express.Router();
 const chatController = require('../controllers/chatController');
+const chatModel = require('../models/chatModel');
 const { body, validationResult } = require('express-validator');
-
-const validateMessage = [
-  body('senderId').notEmpty().withMessage('Sender ID is required'),
-  body('content').notEmpty().withMessage('Message content is required'),
-];
+const validateMessage = require('../middlewares/validateMessage');
 
 const validateReadMessages = [
   body('userId').notEmpty().withMessage('User ID is required'),
@@ -20,10 +17,11 @@ router.post('/:chatId/messages', validateMessage, async (req, res) => {
     return res.status(400).json({ errors: errors.array() });
   }
   try {
-    const { senderId, content } = req.body;
-    const chat = await chatModel.addMessage(req.params.chatId, senderId, content);
+    const { senderId, content, image } = req.body;
+    const chat = await chatModel.addMessage(req.params.chatId, senderId, content, image || null);
     res.json(chat);
   } catch (error) {
+    console.error('Error in POST /:chatId/messages:', error.message, error.stack);
     res.status(500).json({ error: error.message });
   }
 });

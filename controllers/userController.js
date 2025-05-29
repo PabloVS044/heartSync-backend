@@ -280,6 +280,24 @@ const getMatches = [
   }
 ];
 
+const getMatchesUser = [
+  ...validateMatches,
+  async (req, res) => {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      return res.status(400).json({ errors: errors.array() });
+    }
+    try {
+      const skip = parseInt(req.query.skip) || 0;
+      const limit = parseInt(req.query.limit) || 10;
+      const matches = await userModel.getMatchesUser(req.params.id, skip, limit);
+      res.json(matches);
+    } catch (error) {
+      res.status(500).json({ error: error.message });
+    }
+  }
+];
+
 const login = [
   ...validateLogin,
   async (req, res) => {
@@ -332,6 +350,7 @@ module.exports = {
   addLike,
   dislikeUser,
   getMatches,
+  getMatchesUser,
   login,
   unmatchUser
 };

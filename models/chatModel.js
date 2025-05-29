@@ -25,24 +25,45 @@ const createChat = async (matchId) => {
   }
 };
 
-const addMessage = async (chatId, senderId, content) => {
-  const session = driver.session();
+const addMessage = async (chatId, senderId, content, image = null) => {
+  const session = await driver.session();
   try {
+    const messageId = uuidv4();
+    const timestamp = new Date().toISOString();
+    const isRead = false;
+
+    // Create message object
     const message = {
-      id: uuidv4(),
+      id: messageId,
       senderId,
       content,
-      timestamp: new Date().toISOString(),
-      isRead: false // Añadir isRead
+      image: image || '', // Convert null to empty string
+      timestamp,
+      isRead
     };
+
+    // Serialize message to JSON string
+    const messageJson = JSON.stringify(message);
+
     const result = await session.run(
-      `MATCH (c:Chat {id: $chatId})
-       SET c.messages = coalesce(c.messages, []) + [$message]
-       RETURN c`,
-      { chatId, message }
+      `
+        MATCH (c:Chat {id: $chatId})
+        SET c.messages = coalesce(c.messages, []) + [$messageJson]
+        RETURN c
+      `,
+      {
+        chatId,
+        messageJson
+      }
     );
-    return result.records[0].get('c').properties;
+
+    const chat = result.records[0].get('c').properties;
+    // Parse JSON strings back to objects
+    chat.messages = chat.messages.map(json => JSON.parse(json));
+
+    return chat;
   } catch (error) {
+    console.error('Error in addMessage:', error.message, error.stack);
     throw error;
   } finally {
     await session.close();
@@ -50,14 +71,28 @@ const addMessage = async (chatId, senderId, content) => {
 };
 
 const getChat = async (chatId) => {
-  const session = driver.session();
+  const session = await driver.session();
   try {
     const result = await session.run(
-      `MATCH (c:Chat {id: $chatId})
-       RETURN c`,
+      `
+        MATCH (c:Chat {id: $chatId})
+        RETURN c
+      `,
       { chatId }
     );
-    return result.records.length > 0 ? result.records[0].get('c').properties : null;
+
+    if (!result.records.length) {
+      throw new Error('Chat not found');
+    }
+
+    const chat = result.records[0].get('c').properties;
+    // Parse JSON strings to objects
+    chat.messages = chat.messages.map(json => JSON.parse(json));
+
+    return chat;
+  } catch (error) {
+    console.error('Error in getChat:', error.message, error.stack);
+    throw error;
   } finally {
     await session.close();
   }
@@ -91,7 +126,7 @@ const markMessagesAsRead = async (chatId, userId) => {
       `MATCH (c:Chat {id: $chatId})
        WITH c, [msg IN c.messages | 
          CASE WHEN msg.senderId <> $userId AND NOT msg.isRead
-              THEN {id: msg.id, senderId: msg.senderId, content: msg.content, timestamp: msg.timestamp, isRead: true}
+              THEN {id: msg.id, senderId: msg.senderId, content: msg.content, image: msg.image, timestamp: msg.timestamp, isRead: true}
               ELSE msg END] AS updatedMessages
        SET c.messages = updatedMessages
        RETURN c`,
