@@ -1,3 +1,4 @@
+// chatRoutes.js
 const express = require('express');
 const router = express.Router();
 const chatController = require('../controllers/chatController');
@@ -19,6 +20,9 @@ router.post('/:chatId/messages', validateMessage, async (req, res) => {
   try {
     const { senderId, content, image } = req.body;
     const chat = await chatModel.addMessage(req.params.chatId, senderId, content, image || null);
+    const message = chat.messages[chat.messages.length - 1];
+    const io = req.app.get('io'); // Obtener io desde app
+    io.to(req.params.chatId).emit('message', message);
     res.json(chat);
   } catch (error) {
     console.error('Error in POST /:chatId/messages:', error.message, error.stack);
@@ -26,6 +30,29 @@ router.post('/:chatId/messages', validateMessage, async (req, res) => {
   }
 });
 
-router.patch('/:chatId/messages/read', validateReadMessages, chatController.markMessagesAsRead);
+router.patch('/:chatId/messages/read', validateReadMessages, async (req, res) => {
+  const errors = validationResult(req);
+  if (!errors.isEmpty()) {
+    return res.status(400).json({ errors: errors.array() });
+  }
+  try {
+    const { chatId } = req.params;
+    const { userId } = req.body;
+    const chat = await chatModel.markMessagesAsRead(chatId, userId);
+    if (!chat) {
+      return res.status(404).json({ error: 'Chat not found' });
+    }
+    const io = req.app.get('io'); // Obtener io desde app
+    if (io) {
+      io.to(chatId).emit('messagesRead', { chatId, messages: chat.messages });
+    } else {
+      console.error('Socket.IO instance is undefined');
+    }
+    res.json(chat);
+  } catch (error) {
+    console.error('Error in PATCH /:chatId/messages/read:', error.message, error.stack);
+    res.status(500).json({ error: error.message });
+  }
+});
 
 module.exports = router;
