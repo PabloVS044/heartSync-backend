@@ -1,4 +1,3 @@
-// index.js
 const express = require('express');
 const cors = require('cors');
 const http = require('http');
@@ -77,6 +76,21 @@ class HeartSyncServer {
           const updatedChat = await chatModel.addMessage(chatId, senderId, content, image || null);
           const message = updatedChat.messages[updatedChat.messages.length - 1];
           this.io.to(chatId).emit('message', message);
+        } catch (error) {
+          socket.emit('error', { message: error.message });
+        }
+      });
+
+      socket.on('addReaction', async ({ chatId, messageId, userId, emoji }) => {
+        try {
+          const chat = await chatModel.getChat(chatId);
+          if (!chat) {
+            socket.emit('error', { message: 'Chat not found' });
+            return;
+          }
+          const updatedChat = await chatModel.addReactionToMessage(chatId, messageId, userId, emoji);
+          const updatedMessage = updatedChat.messages.find(msg => msg.id === messageId);
+          this.io.to(chatId).emit('messageReaction', { chatId, messageId, reaction: { userId, emoji } });
         } catch (error) {
           socket.emit('error', { message: error.message });
         }
