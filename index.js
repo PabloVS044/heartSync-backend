@@ -63,10 +63,15 @@ class HeartSyncServer {
   }
 
   routes() {
+    console.log('Registering routes...');
     this.app.use('/users', userRoutes);
+    console.log('Registered /users routes');
     this.app.use('/ads', adRoutes);
+    console.log('Registered /ads routes');
     this.app.use('/chats', chatRoutes);
+    console.log('Registered /chats routes');
     this.app.use('/matches', matchRoutes);
+    console.log('Registered /matches routes');
   }
 
   socketEvents() {
