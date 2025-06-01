@@ -31,63 +31,21 @@ class HeartSyncServer {
   }
 
   middlewares() {
-    const allowedOrigins = [
-      'http://localhost:5173',
-      'https://heart-sync.vercel.app' // Reemplazá con tu frontend en producción si cambia
-    ];
-
-    const corsOptions = {
-      origin: (origin, callback) => {
-        if (!origin || allowedOrigins.includes(origin)) {
-          callback(null, true);
-        } else {
-          console.warn(`Blocked by CORS: ${origin}`);
-          callback(new Error('Not allowed by CORS'));
-        }
-      },
-      credentials: true,
-      methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-      allowedHeaders: ['Content-Type', 'Authorization']
-    };
-
-    this.app.use(cors(corsOptions));
-    this.app.options('*', cors(corsOptions));
-
+    this.app.use(cors());
     this.app.use(express.json());
     this.app.use(morgan('dev'));
     this.app.use(express.static('public'));
+    this.app.use((req, res, next) => {
+      res.set('Cache-Control', 'no-store');
+      next();
+    });
   }
 
   routes() {
-    console.log('Registering routes...');
-
-    // Add error handling middleware
-    this.app.use((err, req, res, next) => {
-      if (err instanceof SyntaxError && err.status === 400 && 'body' in err) {
-        return res.status(400).json({ error: 'Invalid JSON payload' });
-      }
-      next(err);
-    });
-
-    // Mount routes with error handling
-    try {
-      this.app.use('/users', userRoutes);
-      console.log('Registered /users routes');
-      this.app.use('/ads', adRoutes);
-      console.log('Registered /ads routes');
-      this.app.use('/chats', chatRoutes);
-      console.log('Registered /chats routes');
-      this.app.use('/matches', matchRoutes);
-      console.log('Registered /matches routes');
-    } catch (error) {
-      console.error('Error mounting routes:', error);
-      throw error;
-    }
-
-    // Handle unmatched routes
-    this.app.use((req, res) => {
-      res.status(404).json({ error: 'Route not found' });
-    });
+    this.app.use('/users', userRoutes);
+    this.app.use('/ads', adRoutes);
+    this.app.use('/chats', chatRoutes);
+    this.app.use('/matches', matchRoutes);
   }
 
   socketEvents() {
@@ -131,6 +89,7 @@ class HeartSyncServer {
             return;
           }
           const updatedChat = await chatModel.addReactionToMessage(chatId, messageId, userId, emoji);
+          const updatedMessage = updatedChat.messages.find(msg => msg.id === messageId);
           this.io.to(chatId).emit('messageReaction', { chatId, messageId, reaction: { userId, emoji } });
         } catch (error) {
           socket.emit('error', { message: error.message });
