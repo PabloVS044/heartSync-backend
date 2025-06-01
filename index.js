@@ -60,14 +60,34 @@ class HeartSyncServer {
 
   routes() {
     console.log('Registering routes...');
-    this.app.use('/users', userRoutes);
-    console.log('Registered /users routes');
-    this.app.use('/ads', adRoutes);
-    console.log('Registered /ads routes');
-    this.app.use('/chats', chatRoutes);
-    console.log('Registered /chats routes');
-    this.app.use('/matches', matchRoutes);
-    console.log('Registered /matches routes');
+
+    // Add error handling middleware
+    this.app.use((err, req, res, next) => {
+      if (err instanceof SyntaxError && err.status === 400 && 'body' in err) {
+        return res.status(400).json({ error: 'Invalid JSON payload' });
+      }
+      next(err);
+    });
+
+    // Mount routes with error handling
+    try {
+      this.app.use('/users', userRoutes);
+      console.log('Registered /users routes');
+      this.app.use('/ads', adRoutes);
+      console.log('Registered /ads routes');
+      this.app.use('/chats', chatRoutes);
+      console.log('Registered /chats routes');
+      this.app.use('/matches', matchRoutes);
+      console.log('Registered /matches routes');
+    } catch (error) {
+      console.error('Error mounting routes:', error);
+      throw error;
+    }
+
+    // Handle unmatched routes
+    this.app.use((req, res) => {
+      res.status(404).json({ error: 'Route not found' });
+    });
   }
 
   socketEvents() {
