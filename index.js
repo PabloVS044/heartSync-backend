@@ -31,7 +31,12 @@ class HeartSyncServer {
   }
 
   middlewares() {
-    this.app.use(cors());
+    this.app.use(cors({
+      origin: 'http://localhost:5173', // o usa una función si tienes varios orígenes
+      credentials: true,
+      methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+      allowedHeaders: ['Content-Type', 'Authorization']
+    }));
     this.app.use(express.json());
     this.app.use(morgan('dev'));
     this.app.use(express.static('public'));
