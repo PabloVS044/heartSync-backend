@@ -25,23 +25,94 @@ const createChat = async (matchId) => {
   }
 };
 
-const addMessage = async (chatId, senderId, content) => {
-  const session = driver.session();
+const addMessage = async (chatId, senderId, content, image = null) => {
+  const session = await driver.session();
   try {
+    const messageId = uuidv4();
+    const timestamp = new Date().toISOString();
+    const isRead = false;
+
+    // Create message object with reactions array
     const message = {
-      id: uuidv4(),
+      id: messageId,
       senderId,
       content,
-      timestamp: new Date().toISOString()
+      image: image || '',
+      timestamp,
+      isRead,
+      reactions: [] // Initialize empty reactions array
     };
+
+    // Serialize message to JSON string
+    const messageJson = JSON.stringify(message);
+
+    const result = await session.run(
+      `
+        MATCH (c:Chat {id: $chatId})
+        SET c.messages = coalesce(c.messages, []) + [$messageJson]
+        RETURN c
+      `,
+      {
+        chatId,
+        messageJson
+      }
+    );
+
+    const chat = result.records[0].get('c').properties;
+    chat.messages = chat.messages.map(json => JSON.parse(json));
+
+    return chat;
+  } catch (error) {
+    console.error('Error in addMessage:', error.message, error.stack);
+    throw error;
+  } finally {
+    await session.close();
+  }
+};
+
+const addReactionToMessage = async (chatId, messageId, userId, emoji) => {
+  const session = await driver.session();
+  try {
     const result = await session.run(
       `MATCH (c:Chat {id: $chatId})
-       SET c.messages = coalesce(c.messages, []) + [$message]
        RETURN c`,
-      { chatId, message }
+      { chatId }
     );
-    return result.records[0].get('c').properties;
+
+    if (!result.records.length) {
+      throw new Error('Chat not found');
+    }
+
+    const chat = result.records[0].get('c').properties;
+    let messages = chat.messages.map(json => JSON.parse(json));
+
+    const messageIndex = messages.findIndex(msg => msg.id === messageId);
+    if (messageIndex === -1) {
+      throw new Error('Message not found');
+    }
+
+    const message = messages[messageIndex];
+    message.reactions = message.reactions || [];
+    message.reactions = message.reactions.filter(reaction => reaction.userId !== userId);
+    message.reactions.push({ userId, emoji });
+
+    messages[messageIndex] = message;
+
+    const updatedMessagesJson = messages.map(msg => JSON.stringify(msg));
+
+    const updateResult = await session.run(
+      `MATCH (c:Chat {id: $chatId})
+       SET c.messages = $updatedMessagesJson
+       RETURN c`,
+      { chatId, updatedMessagesJson }
+    );
+
+    const updatedChat = updateResult.records[0].get('c').properties;
+    updatedChat.messages = updatedChat.messages.map(json => JSON.parse(json));
+
+    return updatedChat;
   } catch (error) {
+    console.error('Error in addReactionToMessage:', error.message, error.stack);
     throw error;
   } finally {
     await session.close();
@@ -49,14 +120,27 @@ const addMessage = async (chatId, senderId, content) => {
 };
 
 const getChat = async (chatId) => {
-  const session = driver.session();
+  const session = await driver.session();
   try {
     const result = await session.run(
-      `MATCH (c:Chat {id: $chatId})
-       RETURN c`,
+      `
+        MATCH (c:Chat {id: $chatId})
+        RETURN c
+      `,
       { chatId }
     );
-    return result.records.length > 0 ? result.records[0].get('c').properties : null;
+
+    if (!result.records.length) {
+      throw new Error('Chat not found');
+    }
+
+    const chat = result.records[0].get('c').properties;
+    chat.messages = chat.messages.map(json => JSON.parse(json));
+
+    return chat;
+  } catch (error) {
+    console.error('Error in getChat:', error.message, error.stack);
+    throw error;
   } finally {
     await session.close();
   }
@@ -68,7 +152,7 @@ const getChatsForUser = async (userId) => {
     const result = await session.run(
       `MATCH (u:User {id: $userId})-[:HAS_MATCH]->(m:Match)-[:HAS_CHAT]->(c:Chat)
        MATCH (other:User)-[:HAS_MATCH]->(m)
-       WHERE other <> u
+       WHERE other.id <> u.id
        RETURN c, other`,
       { userId }
     );
@@ -83,9 +167,55 @@ const getChatsForUser = async (userId) => {
   }
 };
 
+const markMessagesAsRead = async (chatId, userId) => {
+  const session = driver.session();
+  try {
+    const result = await session.run(
+      `MATCH (c:Chat {id: $chatId})
+       RETURN c`,
+      { chatId }
+    );
+
+    if (!result.records.length) {
+      return null;
+    }
+
+    const chat = result.records[0].get('c').properties;
+    let messages = chat.messages.map(json => JSON.parse(json));
+
+    messages = messages.map(msg => {
+      if (msg.senderId !== userId && !msg.isRead) {
+        return { ...msg, isRead: true };
+      }
+      return msg;
+    });
+
+    const updatedMessagesJson = messages.map(msg => JSON.stringify(msg));
+
+    const updateResult = await session.run(
+      `MATCH (c:Chat {id: $chatId})
+       SET c.messages = $updatedMessagesJson
+       RETURN c`,
+      { chatId, updatedMessagesJson }
+    );
+
+    const updatedChat = updateResult.records[0].get('c').properties;
+    updatedChat.messages = updatedChat.messages.map(json => JSON.parse(json));
+
+    return updatedChat;
+  } catch (error) {
+    console.error('Error in markMessagesAsRead:', error.message, error.stack);
+    throw error;
+  } finally {
+    await session.close();
+  }
+};
+
 module.exports = {
   createChat,
   addMessage,
+  addReactionToMessage,
   getChat,
-  getChatsForUser
+  getChatsForUser,
+  markMessagesAsRead
 };

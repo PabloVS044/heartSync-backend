@@ -1,9 +1,11 @@
 const { body, param, query, validationResult } = require('express-validator');
 const userModel = require('../models/userModel');
 const jwt = require('jsonwebtoken');
-const authenticateToken = require('../middleware/auth');
+const { OAuth2Client } = require('google-auth-library');
 
 const JWT_SECRET = process.env.JWT_SECRET;
+const GOOGLE_CLIENT_ID = process.env.GOOGLE_CLIENT_ID;
+const googleClient = new OAuth2Client(GOOGLE_CLIENT_ID);
 
 const validateUser = [
   body('name').notEmpty().withMessage('Name is required'),
@@ -15,6 +17,18 @@ const validateUser = [
   body('gender').isIn(['male', 'female']).withMessage('Gender must be male or female'),
   body('interests').isArray().withMessage('Interests must be an array'),
   body('photos').isArray().withMessage('Photos must be an array'),
+  body('bio').optional().isLength({ max: 500 }).withMessage('Bio must be 500 characters or less'),
+  body('minAgePreference').optional().isInt({ min: 18 }).withMessage('Minimum age preference must be at least 18'),
+  body('maxAgePreference').optional().isInt({ min: 18 }).withMessage('Maximum age preference must be at least 18'),
+  body('internationalMode').optional().isBoolean().withMessage('International mode must be a boolean')
+];
+
+const validateProfileUpdate = [
+  body('age').optional().isInt({ min: 18 }).withMessage('Age must be at least 18'),
+  body('country').optional().notEmpty().withMessage('Country is required'),
+  body('gender').optional().isIn(['male', 'female']).withMessage('Gender must be male or female'),
+  body('interests').optional().isArray().withMessage('Interests must be an array'),
+  body('photos').optional().isArray().withMessage('Photos must be an array'),
   body('bio').optional().isLength({ max: 500 }).withMessage('Bio must be 500 characters or less'),
   body('minAgePreference').optional().isInt({ min: 18 }).withMessage('Minimum age preference must be at least 18'),
   body('maxAgePreference').optional().isInt({ min: 18 }).withMessage('Maximum age preference must be at least 18'),
@@ -38,14 +52,13 @@ const validateLike = [
   param('targetId').notEmpty().withMessage('Target User ID is required')
 ];
 
-const validateDislike = [
-  param('id').notEmpty().withMessage('User ID is required'),
-  param('targetId').notEmpty().withMessage('Target User ID is required')
-];
-
 const validateLogin = [
   body('email').isEmail().withMessage('Invalid email'),
   body('password').notEmpty().withMessage('Password is required')
+];
+
+const validateGoogleLogin = [
+  body('token').notEmpty().withMessage('Google token is required')
 ];
 
 const validateUsers = [
@@ -69,9 +82,55 @@ const createUser = [
   }
 ];
 
-const getUser = [
-  param('id').notEmpty().withMessage('User ID is required'),
+const googleLogin = [
+  ...validateGoogleLogin,
   async (req, res) => {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      return res.status(400).json({ errors: errors.array() });
+    }
+    try {
+      const { token } = req.body;
+      const ticket = await googleClient.verifyIdToken({
+        idToken: token,
+        audience: GOOGLE_CLIENT_ID
+      });
+      const payload = ticket.getPayload();
+      const { sub: googleId, email, name, picture } = payload;
+
+      const user = await userModel.createOrUpdateGoogleUser({ googleId, email, name, picture });
+      const jwtToken = jwt.sign({ userId: user.id, email: user.email }, JWT_SECRET, { expiresIn: '1h' });
+
+      res.status(200).json({ token: jwtToken, userId: user.id });
+    } catch (error) {
+      res.status(401).json({ error: error.message });
+    }
+  }
+];
+
+const updateUserProfile = [
+  param('id').notEmpty().withMessage('User ID is required'),
+  ...validateProfileUpdate,
+  async (req, res) => {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      return res.status(400).json({ errors: errors.array() });
+    }
+    try {
+      const user = await userModel.updateUserProfile(req.params.id, req.body);
+      if (!user) {
+        return res.status(404).json({ error: 'User not found' });
+      }
+      res.json(user);
+    } catch (error) {
+      res.status(500).json({ error: error.message });
+    }
+  }
+];
+
+const getUser = [
+  async (req, res) => {
+    console.log("HOLAAAAA")
     const errors = validationResult(req);
     if (!errors.isEmpty()) {
       return res.status(400).json({ errors: errors.array() });
@@ -166,7 +225,6 @@ const setPreferences = [
 ];
 
 const addLike = [
-  authenticateToken,
   ...validateLike,
   async (req, res) => {
     const errors = validationResult(req);
@@ -174,9 +232,6 @@ const addLike = [
       return res.status(400).json({ errors: errors.array() });
     }
     try {
-      if (req.user.userId !== req.params.id) {
-        return res.status(403).json({ error: 'Unauthorized' });
-      }
       const result = await userModel.addLike(req.params.id, req.params.targetId);
       res.status(200).json({
         message: 'Like added',
@@ -189,19 +244,18 @@ const addLike = [
 ];
 
 const dislikeUser = [
-  authenticateToken,
-  ...validateDislike,
+  ...validateLike,
   async (req, res) => {
     const errors = validationResult(req);
     if (!errors.isEmpty()) {
       return res.status(400).json({ errors: errors.array() });
     }
     try {
-      if (req.user.userId !== req.params.id) {
-        return res.status(403).json({ error: 'Unauthorized' });
+      const success = await userModel.dislikeUser(req.params.id, req.params.targetId);
+      if (!success) {
+        return res.status(404).json({ error: 'User or target not found' });
       }
-      const user = await userModel.dislikeUser(req.params.id, req.params.targetId);
-      res.status(200).json({ message: 'User disliked successfully', user });
+      res.status(200).json({ message: 'Dislike recorded' });
     } catch (error) {
       res.status(500).json({ error: error.message });
     }
@@ -209,7 +263,6 @@ const dislikeUser = [
 ];
 
 const getMatches = [
-  authenticateToken,
   ...validateMatches,
   async (req, res) => {
     const errors = validationResult(req);
@@ -217,12 +270,27 @@ const getMatches = [
       return res.status(400).json({ errors: errors.array() });
     }
     try {
-      if (req.user.userId !== req.params.id) {
-        return res.status(403).json({ error: 'Unauthorized' });
-      }
       const skip = parseInt(req.query.skip) || 0;
       const limit = parseInt(req.query.limit) || 10;
       const matches = await userModel.getMatches(req.params.id, skip, limit);
+      res.json(matches);
+    } catch (error) {
+      res.status(500).json({ error: error.message });
+    }
+  }
+];
+
+const getMatchesUser = [
+  ...validateMatches,
+  async (req, res) => {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      return res.status(400).json({ errors: errors.array() });
+    }
+    try {
+      const skip = parseInt(req.query.skip) || 0;
+      const limit = parseInt(req.query.limit) || 10;
+      const matches = await userModel.getMatchesUser(req.params.id, skip, limit);
       res.json(matches);
     } catch (error) {
       res.status(500).json({ error: error.message });
@@ -240,7 +308,10 @@ const login = [
     try {
       const { email, password } = req.body;
       const user = await userModel.loginUser(email, password);
+
+      // Generate JWT
       const token = jwt.sign({ userId: user.id, email: user.email }, JWT_SECRET, { expiresIn: '1h' });
+
       res.status(200).json({ token, userId: user.id });
     } catch (error) {
       res.status(401).json({ error: error.message });
@@ -248,8 +319,29 @@ const login = [
   }
 ];
 
+const unmatchUser = [
+  ...validateLike,
+  async (req, res) => {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      return res.status(400).json({ errors: errors.array() });
+    }
+    try {
+      const success = await userModel.unmatchUser(req.params.id, req.params.targetId);
+      if (!success) {
+        return res.status(404).json({ error: 'User or match not found' });
+      }
+      res.status(200).json({ message: 'Unmatch successful' });
+    } catch (error) {
+      res.status(500).json({ error: error.message });
+    }
+  }
+];
+
 module.exports = {
   createUser,
+  googleLogin,
+  updateUserProfile,
   getUser,
   getUsers,
   updateUser,
@@ -258,5 +350,7 @@ module.exports = {
   addLike,
   dislikeUser,
   getMatches,
-  login
+  getMatchesUser,
+  login,
+  unmatchUser
 };
