@@ -1,0 +1,503 @@
+openapi: 3.0.3
+info:
+  title: HeartSync API
+  version: 1.0.0
+  description: Documentación de la API para la aplicación HeartSync, que incluye endpoints para usuarios, anuncios, matches y chats.
+servers:
+  - url: http://localhost:3000
+    description: Servidor local
+paths:
+  /users:
+    post:
+      summary: Crear un nuevo usuario
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/User'
+      responses:
+        '201':
+          description: Usuario creado exitosamente
+        '400':
+          description: Error en la solicitud (datos inválidos)
+    get:
+      summary: Obtener todos los usuarios
+      responses:
+        '200':
+          description: Lista de usuarios
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/User'
+  /users/login:
+    post:
+      summary: Iniciar sesión
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                email:
+                  type: string
+                password:
+                  type: string
+              required:
+                - email
+                - password
+      responses:
+        '200':
+          description: Inicio de sesión exitoso
+        '401':
+          description: Credenciales inválidas
+  /users/google-login:
+    post:
+      summary: Iniciar sesión con Google
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                token:
+                  type: string
+              required:
+                - token
+      responses:
+        '200':
+          description: Inicio de sesión con Google exitoso
+        '401':
+          description: Token inválido
+  /users/{id}/profile:
+    put:
+      summary: Actualizar perfil del usuario
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UserProfile'
+      responses:
+        '200':
+          description: Perfil actualizado exitosamente
+        '404':
+          description: Usuario no encontrado
+  /users/{id}:
+    get:
+      summary: Obtener un usuario por ID
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Detalles del usuario
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/User'
+        '404':
+          description: Usuario no encontrado
+    put:
+      summary: Actualizar un usuario
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/User'
+      responses:
+        '200':
+          description: Usuario actualizado exitosamente
+        '404':
+          description: Usuario no encontrado
+    delete:
+      summary: Eliminar un usuario
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+      responses:
+        '204':
+          description: Usuario eliminado exitosamente
+        '404':
+          description: Usuario no encontrado
+  /users/{id}/preferences:
+    post:
+      summary: Establecer preferencias del usuario
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                minAgePreference:
+                  type: number
+                maxAgePreference:
+                  type: number
+                genderPreference:
+                  type: string
+              required:
+                - minAgePreference
+                - maxAgePreference
+                - genderPreference
+      responses:
+        '200':
+          description: Preferencias establecidas exitosamente
+        '404':
+          description: Usuario no encontrado
+  /users/{id}/matches:
+    get:
+      summary: Obtener matches del usuario
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Lista de matches
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Match'
+  /users/{id}/like/{targetId}:
+    post:
+      summary: Dar like a otro usuario
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+        - in: path
+          name: targetId
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Like registrado exitosamente
+        '404':
+          description: Usuario no encontrado
+  /users/{id}/dislike/{targetId}:
+    post:
+      summary: Dar dislike a otro usuario
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+        - in: path
+          name: targetId
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Dislike registrado exitosamente
+        '404':
+          description: Usuario no encontrado
+  /ads:
+    post:
+      summary: Crear un nuevo anuncio
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Ad'
+      responses:
+        '201':
+          description: Anuncio creado exitosamente
+        '400':
+          description: Error en la solicitud
+    get:
+      summary: Obtener todos los anuncios
+      responses:
+        '200':
+          description: Lista de anuncios
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Ad'
+  /ads/{id}:
+    get:
+      summary: Obtener un anuncio por ID
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Detalles del anuncio
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Ad'
+        '404':
+          description: Anuncio no encontrado
+    put:
+      summary: Actualizar un anuncio
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Ad'
+      responses:
+        '200':
+          description: Anuncio actualizado exitosamente
+        '404':
+          description: Anuncio no encontrado
+    delete:
+      summary: Eliminar un anuncio
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+      responses:
+        '204':
+          description: Anuncio eliminado exitosamente
+        '404':
+          description: Anuncio no encontrado
+  /ads/user/{userId}:
+    get:
+      summary: Obtener anuncios para un usuario
+      parameters:
+        - in: path
+          name: userId
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Lista de anuncios para el usuario
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Ad'
+  /matches/{matchId}:
+    get:
+      summary: Obtener un match por ID
+      parameters:
+        - in: path
+          name: matchId
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Detalles del match
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Match'
+        '404':
+          description: Match no encontrado
+  /matches/user/{userId}:
+    get:
+      summary: Obtener matches para un usuario
+      parameters:
+        - in: path
+          name: userId
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Lista de matches para el usuario
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Match'
+  /chats/{chatId}:
+    get:
+      summary: Obtener un chat por ID
+      parameters:
+        - in: path
+          name: chatId
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Detalles del chat
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Chat'
+        '404':
+          description: Chat no encontrado
+  /chats/user/{userId}:
+    get:
+      summary: Obtener chats para un usuario
+      parameters:
+        - in: path
+          name: userId
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Lista de chats para el usuario
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Chat'
+
+components:
+  schemas:
+    User:
+      type: object
+      properties:
+        name:
+          type: string
+        surname:
+          type: string
+        email:
+          type: string
+        password:
+          type: string
+        age:
+          type: number
+        country:
+          type: string
+        gender:
+          type: string
+        interests:
+          type: array
+          items:
+            type: string
+        photos:
+          type: array
+          items:
+            type: string
+        bio:
+          type: string
+        minAgePreference:
+          type: number
+        maxAgePreference:
+          type: number
+      required:
+        - name
+        - surname
+        - email
+        - password
+        - age
+        - country
+        - gender
+    UserProfile:
+      type: object
+      properties:
+        bio:
+          type: string
+        photos:
+          type: array
+          items:
+            type: string
+        interests:
+          type: array
+          items:
+            type: string
+    Ad:
+      type: object
+      properties:
+        title:
+          type: string
+        description:
+          type: string
+        image:
+          type: string
+        targetedInterests:
+          type: array
+          items:
+            type: string
+      required:
+        - title
+        - description
+        - image
+        - targetedInterests
+    Match:
+      type: object
+      properties:
+        matchId:
+          type: string
+        userId1:
+          type: string
+        userId2:
+          type: string
+        matchDate:
+          type: string
+          format: date-time
+    Chat:
+      type: object
+      properties:
+        chatId:
+          type: string
+        participants:
+          type: array
+          items:
+            type: string
+        messages:
+          type: array
+          items:
+            type: object
+            properties:
+              senderId:
+                type: string
+              content:
+                type: string
+              timestamp:
+                type: string
+                format: date-time
