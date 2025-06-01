@@ -23,7 +23,7 @@ const getMatch = [
       if (!match) {
         return res.status(404).json({ error: 'Match not found' });
       }
-      res.json(match);
+      res.json(match); // Incluye match, users y chat
     } catch (error) {
       res.status(500).json({ error: error.message });
     }
@@ -41,7 +41,7 @@ const getMatchesForUser = [
       const skip = parseInt(req.query.skip) || 0;
       const limit = parseInt(req.query.limit) || 10;
       const matches = await matchModel.getMatchesForUser(req.params.userId, skip, limit);
-      res.json(matches);
+      res.json(matches); // Incluye match, otherUser y chat
     } catch (error) {
       res.status(500).json({ error: error.message });
     }

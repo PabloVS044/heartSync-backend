@@ -88,6 +88,136 @@ const createUser = async (userData) => {
   }
 };
 
+const createOrUpdateGoogleUser = async (googleData) => {
+  const session = driver.session();
+  try {
+    const { googleId, email, name, picture } = googleData;
+    const normalizedName = name.split(' ');
+    const firstName = normalizedName[0] || '';
+    const surname = normalizedName.slice(1).join(' ') || '';
+    const id = uuidv4();
+
+    const result = await session.run(
+      `MERGE (u:User {email: $email})
+       ON CREATE SET
+         u.id = $id,
+         u.googleId = $googleId,
+         u.name = $name,
+         u.surname = $surname,
+         u.email = $email,
+         u.photos = [$picture],
+         u.lastActive = $lastActive,
+         u.likesGiven = [],
+         u.likesReceived = [],
+         u.matches = [],
+         u.dislikesGiven = [],
+         u.internationalMode = false,
+         u.interests = [],
+         u.bio = '',
+         u.age = null,
+         u.country = null,
+         u.gender = null,
+         u.minAgePreference = 18,
+         u.maxAgePreference = 100
+       ON MATCH SET
+         u.googleId = $googleId,
+         u.name = $name,
+         u.surname = $surname,
+         u.photos = CASE 
+                     WHEN $picture IN coalesce(u.photos, []) THEN u.photos 
+                     ELSE coalesce(u.photos, []) + $picture 
+                    END,
+         u.lastActive = $lastActive
+       RETURN u`,
+      {
+        id,
+        googleId,
+        email,
+        name: firstName,
+        surname,
+        picture,
+        lastActive: new Date().toISOString()
+      }
+    );
+
+    const user = result.records[0].get('u').properties;
+    delete user.password;
+    return user;
+  } catch (error) {
+    throw new Error(`Failed to create or update Google user: ${error.message}`);
+  } finally {
+    await session.close();
+  }
+};
+
+const updateUserProfile = async (userId, userData) => {
+  const session = driver.session();
+  try {
+    const finalUserId = String(userId);
+    const normalizedInterests = normalizeInterests(userData.interests || []);
+    const defaultMinAge = userData.gender === 'male' ? 31 : 18;
+    const defaultMaxAge = userData.gender === 'male' ? 50 : 24;
+
+    const updateData = {
+      id: finalUserId,
+      age: userData.age || null,
+      country: userData.country || null,
+      gender: userData.gender || null,
+      interests: normalizedInterests,
+      photos: userData.photos || [],
+      bio: userData.bio || '',
+      minAgePreference: userData.minAgePreference || defaultMinAge,
+      maxAgePreference: userData.maxAgePreference || defaultMaxAge,
+      internationalMode: userData.internationalMode || false,
+      lastActive: new Date().toISOString(),
+    };
+
+
+    const result = await session.run(
+      `MATCH (u:User {id: $id})
+       SET u.age = $age,
+           u.country = $country,
+           u.gender = $gender,
+           u.interests = $interests,
+           u.photos = $photos,
+           u.bio = $bio,
+           u.minAgePreference = $minAgePreference,
+           u.maxAgePreference = $maxAgePreference,
+           u.internationalMode = $internationalMode,
+           u.lastActive = $lastActive
+       WITH u
+       MERGE (c:Country {name: $country})
+       MERGE (g:Gender {name: $gender})
+       MERGE (u)-[:FROM_COUNTRY]->(c)
+       MERGE (u)-[:HAS_GENDER]->(g)
+       WITH u
+       // Delete existing interest relationships
+       OPTIONAL MATCH (u)-[r:SHARES_INTEREST]->(i:Interest)
+       DELETE r
+       WITH u
+       // Recreate interest relationships
+       UNWIND $interests AS interest
+       MERGE (i:Interest {name: interest})
+       MERGE (u)-[:SHARES_INTEREST]->(i)
+       RETURN u`,
+      updateData
+    );
+
+    const user = result.records.length > 0 ? result.records[0].get('u').properties : null;
+    if (!user) {
+      console.log('No user returned for id:', finalUserId);
+      throw new Error('User not found');
+    }
+    delete user.password;
+    return user;
+  } catch (error) {
+    console.error('Error updating user profile:', error);
+    throw new Error(`Failed to update user profile: ${error.message}`);
+  } finally {
+    await session.close();
+  }
+};
+
 const loginUser = async (email, password) => {
   const session = driver.session();
   try {
@@ -115,6 +245,7 @@ const loginUser = async (email, password) => {
 };
 
 const getUser = async (id) => {
+  console.log(`Fetching user with ID: ${id}`);
   const session = driver.session();
   try {
     const result = await session.run(
@@ -172,8 +303,7 @@ const updateUser = async (id, userData) => {
       lastActive: new Date().toISOString(),
       minAgePreference: userData.minAgePreference,
       maxAgePreference: userData.maxAgePreference,
-      internationalMode: userData.internationalMode || false,
-      dislikesGiven: userData.dislikesGiven || []
+      internationalMode: userData.internationalMode || false
     };
     
     if (userData.password) {
@@ -195,8 +325,7 @@ const updateUser = async (id, userData) => {
            u.lastActive = $lastActive,
            u.minAgePreference = $minAgePreference,
            u.maxAgePreference = $maxAgePreference,
-           u.internationalMode = $internationalMode,
-           u.dislikesGiven = $dislikesGiven
+           u.internationalMode = $internationalMode
        MERGE (c:Country {name: $country})
        MERGE (g:Gender {name: $gender})
        CREATE (u)-[:FROM_COUNTRY]->(c)
@@ -255,54 +384,80 @@ const setPreferences = async (userId, minAge, maxAge) => {
 const addLike = async (userId, targetUserId) => {
   const session = driver.session();
   try {
-    const result = await session.run(
-      `MATCH (u:User {id: $userId})-[:HAS_GENDER]->(ug:Gender),
-             (t:User {id: $targetUserId})-[:HAS_GENDER]->(tg:Gender)
-       WHERE u <> t
-         AND ((ug.name = 'male' AND tg.name = 'female') OR (ug.name = 'female' AND tg.name = 'male'))
-       SET u.likesGiven = coalesce(u.likesGiven, []) + $targetUserId,
-           t.likesReceived = coalesce(t.likesReceived, []) + $userId
-       WITH u, t
-       WHERE $targetUserId IN u.likesReceived AND $userId IN t.likesGiven
-       SET u.matches = coalesce(u.matches, []) + $targetUserId,
-           t.matches = coalesce(t.matches, []) + $userId
-       RETURN u, t, EXISTS((u)-[:MATCHED]->(t)) AS isMatched`,
+    const checkUsers = await session.run(
+      `MATCH (u:User {id: $userId}), (t:User {id: $targetUserId})
+       RETURN u, t`,
       { userId, targetUserId }
     );
+    if (checkUsers.records.length === 0) {
+      throw new Error('User or target user not found');
+    }
+
+    const matchId = uuidv4();
+    const createdAt = new Date().toISOString();
+    const result = await session.run(
+      `
+      MATCH (u:User {id: $userId})-[:HAS_GENDER]->(ug:Gender),
+            (t:User {id: $targetUserId})-[:HAS_GENDER]->(tg:Gender)
+      WHERE u <> t
+        AND ((ug.name = 'male' AND tg.name = 'female') OR (ug.name = 'female' AND tg.name = 'male'))
+      SET u.likesGiven = coalesce(u.likesGiven, []) + $targetUserId,
+          t.likesReceived = coalesce(t.likesReceived, []) + $userId
+      WITH u, t
+      OPTIONAL MATCH (u)-[:SHARES_INTEREST]->(i:Interest)<-[:SHARES_INTEREST]-(t)
+      WITH u, t, collect(i.name) AS sharedInterests
+      WHERE $targetUserId IN u.likesReceived AND $userId IN t.likesGiven
+      CREATE (m:Match {
+        id: $matchId,
+        userId1: $userId,
+        userId2: $targetUserId,
+        user1Name: u.name,
+        user2Name: t.name,
+        sharedInterests: sharedInterests,
+        createdAt: $createdAt
+      })
+      CREATE (u)-[:HAS_MATCH]->(m)
+      CREATE (t)-[:HAS_MATCH]->(m)
+      SET u.matches = coalesce(u.matches, []) + $targetUserId,
+          t.matches = coalesce(t.matches, []) + $userId
+      RETURN u, t, m, EXISTS((u)-[:HAS_MATCH]->(m)) AS isMatched
+      `,
+      { userId, targetUserId, matchId, createdAt }
+    );
+
+    if (result.records.length === 0) {
+      return {
+        user: checkUsers.records[0].get('u').properties,
+        target: checkUsers.records[0].get('t').properties,
+        isMatched: false,
+        match: null,
+        chat: null
+      };
+    }
+
     const record = result.records[0];
     const isMatched = record.get('isMatched');
-    
+
+    let chat = null;
     if (isMatched) {
-      const match = await matchModel.createMatch(userId, targetUserId);
-      await chatModel.createChat(match.match.id);
+      try {
+        chat = await chatModel.createChat(matchId);
+      } catch (chatError) {
+        console.error(`Failed to create chat for match ${matchId}:`, chatError.message);
+        throw new Error('Match created but chat creation failed');
+      }
     }
-    
+
     return {
       user: record.get('u').properties,
       target: record.get('t').properties,
-      isMatched
+      isMatched,
+      match: isMatched ? record.get('m').properties : null,
+      chat
     };
-  } finally {
-    await session.close();
-  }
-};
-
-const dislikeUser = async (userId, targetUserId) => {
-  const session = driver.session();
-  try {
-    const result = await session.run(
-      `MATCH (u:User {id: $userId}), (t:User {id: $targetUserId})
-       WHERE u <> t
-       SET u.dislikesGiven = coalesce(u.dislikesGiven, []) + $targetUserId
-       RETURN u`,
-      { userId, targetUserId }
-    );
-    const user = result.records[0]?.get('u').properties;
-    if (user) {
-      delete user.password;
-      return user;
-    }
-    throw new Error('User not found');
+  } catch (error) {
+    console.error(`Error in addLike for user ${userId} to ${targetUserId}:`, error.message);
+    throw error;
   } finally {
     await session.close();
   }
@@ -312,61 +467,223 @@ const getMatches = async (userId, skip = 0, limit = 10) => {
   const session = driver.session();
   try {
     const result = await session.run(
-      `MATCH (u:User {id: $userId})-[:HAS_GENDER]->(g:Gender)
-       OPTIONAL MATCH (matched:User)-[:HAS_GENDER]->(mg:Gender)
-       WHERE matched.id IN u.matches
-         AND matched.age >= u.minAgePreference 
-         AND matched.age <= u.maxAgePreference
-         AND (u.internationalMode = true OR (MATCH (u)-[:FROM_COUNTRY]->(uc:Country), 
-                                             (matched)-[:FROM_COUNTRY]->(mc:Country) 
-                                             WHERE uc.name = mc.name))
-         AND ((g.name = 'male' AND mg.name = 'female') OR (g.name = 'female' AND mg.name = 'male'))
-       OPTIONAL MATCH (liked:User)-[:HAS_GENDER]->(lg:Gender)
-       WHERE liked.id IN u.likesReceived
-         AND NOT liked.id IN u.matches
-         AND liked.age >= u.minAgePreference 
-         AND liked.age <= u.maxAgePreference
-         AND (u.internationalMode = true OR (MATCH (u)-[:FROM_COUNTRY]->(uc:Country), 
-                                             (liked)-[:FROM_COUNTRY]->(lc:Country) 
-                                             WHERE uc.name = lc.name))
-         AND ((g.name = 'male' AND lg.name = 'female' AND liked.age > 30)
-           OR (g.name = 'female' AND lg.name = 'male' AND liked.age < 25))
-       OPTIONAL MATCH (potential:User)-[:HAS_GENDER]->(pg:Gender)
-       WHERE NOT potential.id IN u.matches
-         AND NOT potential.id IN u.likesReceived
-         AND NOT potential.id IN coalesce(u.dislikesGiven, [])
-         AND potential.age >= u.minAgePreference 
-         AND potential.age <= u.maxAgePreference
-         AND (u.internationalMode = true OR (MATCH (u)-[:FROM_COUNTRY]->(uc:Country), 
-                                             (potential)-[:FROM_COUNTRY]->(pc:Country) 
-                                             WHERE uc.name = pc.name))
-         AND ((g.name = 'male' AND pg.name = 'female' AND potential.age > 30)
-           OR (g.name = 'female' AND pg.name = 'male' AND potential.age < 25))
-       MATCH (u)-[:SHARES_INTEREST]->(i:Interest)<-[:SHARES_INTEREST]-(potential)
-       MATCH (u)-[:FROM_COUNTRY]->(c:Country)<-[:FROM_COUNTRY]-(potential)
-       WITH u, matched, liked, potential, count(i) AS sharedInterests
-       WHERE matched IS NOT NULL OR liked IS NOT NULL OR potential IS NOT NULL
-       RETURN 
-         CASE 
-           WHEN matched IS NOT NULL THEN {user: matched, type: 'matched', sharedInterests: 0}
-           WHEN liked IS NOT NULL THEN {user: liked, type: 'liked', sharedInterests: 0}
-           ELSE {user: potential, type: 'potential', sharedInterests: sharedInterests}
-         END AS match
-       ORDER BY 
-         CASE 
-           WHEN matched IS NOT NULL THEN 1
-           WHEN liked IS NOT NULL THEN 2
-           ELSE 3
-         END, sharedInterests DESC
-       SKIP $skip
-       LIMIT $limit`,
+      `
+      MATCH (u:User {id: $userId})-[:HAS_GENDER]->(g:Gender)
+      MATCH (u)-[:FROM_COUNTRY]->(uc:Country)
+      MATCH (u)-[:SHARES_INTEREST]->(i:Interest)
+      WITH u, uc, g, collect(i.name) AS userInterests, count(i) AS userInterestCount
+
+      MATCH (potential:User)-[:HAS_GENDER]->(pg:Gender),
+            (potential)-[:FROM_COUNTRY]->(pc:Country),
+            (potential)-[:SHARES_INTEREST]->(pi:Interest)
+      WHERE potential.id <> u.id
+        AND NOT potential.id IN u.matches
+        AND NOT potential.id IN u.dislikesGiven
+        AND NOT potential.id IN u.likesGiven
+        AND potential.age >= u.minAgePreference
+        AND potential.age <= u.maxAgePreference
+        AND u.age >= potential.minAgePreference
+        AND u.age <= potential.maxAgePreference
+        AND (u.internationalMode = true OR uc.name = pc.name)
+        AND (potential.internationalMode = true OR pc.name = uc.name)
+        AND (
+          (g.name = 'male' AND pg.name = 'female') OR
+          (g.name = 'female' AND pg.name = 'male')
+        )
+
+      WITH potential, u, uc, pc, userInterests, userInterestCount, collect(pi.name) AS potentialInterests
+      WITH potential, u, uc, pc,
+           userInterests,
+           potentialInterests,
+           userInterestCount,
+           size(potentialInterests) AS potentialInterestCount,
+           size([x IN potentialInterests WHERE x IN userInterests]) AS sharedInterestCount
+
+      WITH potential, u, uc, pc,
+           sharedInterestCount,
+           userInterestCount,
+           potentialInterestCount,
+           CASE 
+             WHEN userInterestCount + potentialInterestCount = 0 THEN 0
+             ELSE (sharedInterestCount * 2.0 / (userInterestCount + potentialInterestCount)) * 60
+           END AS interestScore,
+           
+           CASE 
+             WHEN abs(potential.age - u.age) <= 2 THEN 25
+             WHEN abs(potential.age - u.age) <= 5 THEN 20
+             WHEN abs(potential.age - u.age) <= 10 THEN 15
+             WHEN abs(potential.age - u.age) <= 15 THEN 10
+             ELSE 5
+           END AS ageScore,
+           
+           CASE 
+             WHEN uc.name = pc.name THEN 15
+             WHEN u.internationalMode = true AND potential.internationalMode = true THEN 10
+             ELSE 5
+           END AS locationScore
+
+      WITH potential,
+           sharedInterestCount,
+           interestScore + ageScore + locationScore AS totalMatchPercentage
+
+      RETURN 
+        {
+          user: potential, 
+          type: 'potential', 
+          sharedInterests: sharedInterestCount,
+          matchPercentage: totalMatchPercentage
+        } AS match
+      ORDER BY totalMatchPercentage DESC, sharedInterestCount DESC
+      SKIP $skip
+      LIMIT $limit
+      `,
       { userId, skip: neo4j.int(skip), limit: neo4j.int(limit) }
     );
-    return result.records.map(record => ({
-      ...record.get('match').user.properties,
-      matchType: record.get('match').type,
-      sharedInterests: record.get('match').sharedInterests.low || 0
-    }));
+
+    return result.records.map(record => {
+      const matchData = record.get('match');
+      console.log(Math.round(matchData.matchPercentage * 100) / 100)
+      return {
+        ...matchData.user.properties,
+        matchType: matchData.type,
+        sharedInterests: matchData.sharedInterests.low || matchData.sharedInterests || 0,
+        matchPercentage: Math.round(matchData.matchPercentage * 100) / 100
+      };
+    });
+  } finally {
+    await session.close();
+  }
+};
+
+const getMatchesUser = async (userId, skip = 0, limit = 10) => {
+  const session = driver.session();
+  try {
+    const result = await session.run(
+      `
+      MATCH (u:User {id: $userId})-[:HAS_GENDER]->(g:Gender)
+      MATCH (u)-[:FROM_COUNTRY]->(uc:Country)
+      MATCH (u)-[:SHARES_INTEREST]->(ui:Interest)
+      WITH u, uc, g, collect(ui.name) AS userInterests, count(ui) AS userInterestCount
+
+      MATCH (u)-[:HAS_MATCH]->(m:Match)
+      MATCH (other:User)-[:HAS_MATCH]->(m)
+      WHERE other.id <> u.id
+      
+      OPTIONAL MATCH (m)-[:HAS_CHAT]->(c:Chat)
+      MATCH (other)-[:HAS_GENDER]->(og:Gender)
+      MATCH (other)-[:FROM_COUNTRY]->(oc:Country)
+      MATCH (other)-[:SHARES_INTEREST]->(oi:Interest)
+      
+      WITH m, other, c, u, uc, g, userInterests, userInterestCount, 
+           collect(oi.name) AS otherInterests, count(oi) AS otherInterestCount, oc
+
+      WITH m, other, c, u, uc, oc,
+           userInterests,
+           otherInterests,
+           userInterestCount,
+           otherInterestCount,
+           size([x IN otherInterests WHERE x IN userInterests]) AS sharedInterestCount
+
+      WITH m, other, c, u, uc, oc,
+           sharedInterestCount,
+           userInterestCount,
+           otherInterestCount,
+           otherInterests,
+           CASE 
+             WHEN userInterestCount + otherInterestCount = 0 THEN 0
+             ELSE (sharedInterestCount * 2.0 / (userInterestCount + otherInterestCount)) * 60
+           END AS interestScore,
+           
+           CASE 
+             WHEN abs(other.age - u.age) <= 2 THEN 25
+             WHEN abs(other.age - u.age) <= 5 THEN 20
+             WHEN abs(other.age - u.age) <= 10 THEN 15
+             WHEN abs(other.age - u.age) <= 15 THEN 10
+             ELSE 5
+           END AS ageScore,
+           
+           CASE 
+             WHEN uc.name = oc.name THEN 15
+             WHEN u.internationalMode = true AND other.internationalMode = true THEN 10
+             ELSE 5
+           END AS locationScore
+
+      WITH m, other, c, otherInterests, sharedInterestCount,
+           interestScore + ageScore + locationScore AS totalMatchPercentage
+
+      RETURN m, other, c, otherInterests, sharedInterestCount, totalMatchPercentage
+      ORDER BY m.createdAt DESC
+      SKIP $skip
+      LIMIT $limit
+      `,
+      { userId, skip: neo4j.int(skip), limit: neo4j.int(limit) }
+    );
+
+    return result.records.map(record => {
+      const match = record.get('m').properties;
+      const otherUser = record.get('other').properties;
+      const chat = record.get('c') ? record.get('c').properties : { id: null, messages: [] };
+      const sharedInterests = record.get('sharedInterestCount').low || record.get('sharedInterestCount') || 0;
+      const matchPercentage = Math.round(record.get('totalMatchPercentage') * 100) / 100;
+      
+      delete otherUser.password;
+
+      const isUser1 = match.userId1 === userId;
+      const otherUserName = isUser1 ? match.user2Name : match.user1Name;
+      const otherUserId = isUser1 ? match.userId2 : match.userId1;
+
+      return {
+        match,
+        otherUser: {
+          ...otherUser,
+          name: otherUserName,
+          id: otherUserId,
+          interests: record.get('otherInterests')
+        },
+        chat,
+        sharedInterests,
+        matchPercentage
+      };
+    });
+  } finally {
+    await session.close();
+  }
+};
+
+const dislikeUser = async (userId, targetUserId) => {
+  const session = driver.session();
+  try {
+    await session.run(
+      `MATCH (u:User {id: $userId}), (t:User {id: $targetUserId})
+       WHERE u <> t
+       SET u.dislikesGiven = coalesce(u.dislikesGiven, []) + $targetUserId
+       RETURN u`,
+      { userId, targetUserId }
+    );
+    return true;
+  } finally {
+    await session.close();
+  }
+};
+
+const unmatchUser = async (userId, targetUserId) => {
+  const session = driver.session();
+  try {
+    await session.run(
+      `
+      MATCH (u:User {id: $userId})-[:HAS_MATCH]->(m:Match)<-[:HAS_MATCH]-(t:User {id: $targetUserId})
+      OPTIONAL MATCH (m)-[:HAS_CHAT]->(c:Chat)
+      SET u.matches = [x IN u.matches WHERE x <> $targetUserId],
+          t.matches = [x IN t.matches WHERE x <> $userId]
+      DETACH DELETE m, c
+      RETURN true
+      `,
+      { userId, targetUserId }
+    );
+    return true;
+  } catch (error) {
+    console.error(`Error unmatching user ${userId} and ${targetUserId}:`, error.message);
+    throw error;
   } finally {
     await session.close();
   }
@@ -374,6 +691,8 @@ const getMatches = async (userId, skip = 0, limit = 10) => {
 
 module.exports = {
   createUser,
+  createOrUpdateGoogleUser,
+  updateUserProfile,
   loginUser,
   getUser,
   getUsers,
@@ -381,6 +700,8 @@ module.exports = {
   deleteUser,
   setPreferences,
   addLike,
+  getMatches,
+  getMatchesUser,
   dislikeUser,
-  getMatches
+  unmatchUser
 };
