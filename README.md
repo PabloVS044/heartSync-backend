@@ -6,41 +6,94 @@ Una API backend moderna y escalable construida con Express.js, diseñada para po
 
 Este proyecto proporciona una infraestructura backend robusta para HeartSync, una aplicación enfocada en conectar personas mediante intereses y preferencias compartidas. Utiliza tecnologías de vanguardia para garantizar un rendimiento óptimo, seguridad y escalabilidad.
 
-## 📦 Instalación
+---
 
-Sigue estos pasos para configurar el proyecto localmente:
+  
 
-- ⬇️ **Clona el repositorio**:
-  ```bash
-  git clone https://github.com/PabloVS044/heartSync-backend.git
-  ```
+## 🚀 Instalación
 
-- ⚙️ **Navega al directorio del proyecto**:
-  ```bash
-  cd heartSync-backend
-  ```
+  
 
-- ➕ **Instala las dependencias**:
-  ```bash
-  npm install
-  ```
+Sigue estos pasos para ejecutar el proyecto localmente:
 
-- 📝 **Configura las variables de entorno**:
-  - Crea un archivo `.env` en la raíz del proyecto.
-  - Agrega las siguientes variables:
-    ```
-    PORT=3000
-    NEO4J_URI=bolt://localhost:7687
-    NEO4J_USER=neo4j
-    NEO4J_PASSWORD=password
+  
+
+1. ⬇️ **Clonar el repositorio**
+
+  
+
+```bash
+
+git clone https://github.com/PabloVS044/heartSync-backend.git
+
+```
+
+  
+
+2. 📁 **Entrar en el directorio del proyecto**
+
+  
+
+```bash
+
+cd  heartSync-backend
+
+```
+
+  
+
+3. 📦 **Instalar dependencias**
+
+  
+
+```bash
+
+npm  install
+
+```
+
+  
+
+4. ⚙️ **Configurar variables de entorno**
+
+  
+
+Crea un archivo `.env` en la raíz del proyecto con el siguiente contenido:
+
+  
+
+```env
+
+    PORT=tu_puerto
+
+    NEO4J_URI=tu_uri_de_neo4j
+
+    NEO4J_USER=tu_usuario_de_neo4j
+
+    NEO4J_PASSWORD=tu_contraseña_de_neo4j
+
     JWT_SECRET=tu_clave_secreta_jwt
-    GOOGLE_CLIENT_ID=tu_id_de_cliente_google
-    ```
 
-- 🚀 **Ejecuta la aplicación**:
-  ```bash
-  npm run dev
-  ```
+    GOOGLE_CLIENT_ID=tu_id_de_cliente_google
+
+
+```
+
+  
+
+5. ▶️ **Iniciar el servidor de desarrollo**
+
+  
+
+```bash
+
+npm  run  dev
+
+```
+
+  
+
+---
 
 ## 💻 Uso
 
@@ -172,8 +225,4 @@ Este proyecto está bajo la licencia [MIT](LICENSE).
 
 - **PabloVS044**:
   - [GitHub](https://github.com/PabloVS044)
-  - [LinkedIn](your_linkedin_link)
 
----
-
-[![Readme generado con Dokugen](https://img.shields.io/badge/Readme%20generado%20con-Dokugen-brightgreen)](https://www.npmjs.com/package/dokugen)
