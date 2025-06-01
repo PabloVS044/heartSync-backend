@@ -151,16 +151,15 @@ const createOrUpdateGoogleUser = async (googleData) => {
 };
 
 const updateUserProfile = async (userId, userData) => {
-  console.log(userId)
-  console.log(userData)
   const session = driver.session();
   try {
+    const finalUserId = String(userId);
     const normalizedInterests = normalizeInterests(userData.interests || []);
     const defaultMinAge = userData.gender === 'male' ? 31 : 18;
     const defaultMaxAge = userData.gender === 'male' ? 50 : 24;
 
     const updateData = {
-      id: userId,
+      id: finalUserId,
       age: userData.age || null,
       country: userData.country || null,
       gender: userData.gender || null,
@@ -170,45 +169,49 @@ const updateUserProfile = async (userId, userData) => {
       minAgePreference: userData.minAgePreference || defaultMinAge,
       maxAgePreference: userData.maxAgePreference || defaultMaxAge,
       internationalMode: userData.internationalMode || false,
-      lastActive: new Date().toISOString()
+      lastActive: new Date().toISOString(),
     };
 
+
     const result = await session.run(
-      `MATCH (u:User {id: $id}) 
-SET u.age = $age,
-    u.country = $country,
-    u.gender = $gender,
-    u.interests = $interests,
-    u.photos = $photos,
-    u.bio = $bio,
-    u.minAgePreference = $minAgePreference,
-    u.maxAgePreference = $maxAgePreference,
-    u.internationalMode = $internationalMode,
-    u.lastActive = $lastActive
-MERGE (c:Country {name: $country})
-MERGE (g:Gender {name: $gender})
-CREATE (u)-[:FROM_COUNTRY]->(c)
-CREATE (u)-[:HAS_GENDER]->(g)
-WITH u
-MATCH (u)-[r:SHARES_INTEREST]->(i:Interest)
-DELETE r
-WITH u, $interests AS interests
-FOREACH (interest IN interests | 
-  MERGE (i:Interest {name: interest}) 
-  CREATE (u)-[:SHARES_INTEREST]->(i)
-)
-RETURN u
-`,
+      `MATCH (u:User {id: $id})
+       SET u.age = $age,
+           u.country = $country,
+           u.gender = $gender,
+           u.interests = $interests,
+           u.photos = $photos,
+           u.bio = $bio,
+           u.minAgePreference = $minAgePreference,
+           u.maxAgePreference = $maxAgePreference,
+           u.internationalMode = $internationalMode,
+           u.lastActive = $lastActive
+       WITH u
+       MERGE (c:Country {name: $country})
+       MERGE (g:Gender {name: $gender})
+       MERGE (u)-[:FROM_COUNTRY]->(c)
+       MERGE (u)-[:HAS_GENDER]->(g)
+       WITH u
+       // Delete existing interest relationships
+       OPTIONAL MATCH (u)-[r:SHARES_INTEREST]->(i:Interest)
+       DELETE r
+       WITH u
+       // Recreate interest relationships
+       UNWIND $interests AS interest
+       MERGE (i:Interest {name: interest})
+       MERGE (u)-[:SHARES_INTEREST]->(i)
+       RETURN u`,
       updateData
     );
 
     const user = result.records.length > 0 ? result.records[0].get('u').properties : null;
     if (!user) {
+      console.log('No user returned for id:', finalUserId);
       throw new Error('User not found');
     }
     delete user.password;
     return user;
   } catch (error) {
+    console.error('Error updating user profile:', error);
     throw new Error(`Failed to update user profile: ${error.message}`);
   } finally {
     await session.close();
@@ -488,34 +491,65 @@ const getMatches = async (userId, skip = 0, limit = 10) => {
           (g.name = 'female' AND pg.name = 'male')
         )
 
-      WITH potential, userInterests, userInterestCount, collect(pi.name) AS potentialInterests
-      WITH potential, 
-           size([x IN potentialInterests WHERE x IN userInterests]) AS sharedInterestCount,
-           userInterestCount
-      WITH potential, 
-           sharedInterestCount, 
-           (sharedInterestCount * 100.0 / userInterestCount) AS matchPercentage
+      WITH potential, u, uc, pc, userInterests, userInterestCount, collect(pi.name) AS potentialInterests
+      WITH potential, u, uc, pc,
+           userInterests,
+           potentialInterests,
+           userInterestCount,
+           size(potentialInterests) AS potentialInterestCount,
+           size([x IN potentialInterests WHERE x IN userInterests]) AS sharedInterestCount
+
+      WITH potential, u, uc, pc,
+           sharedInterestCount,
+           userInterestCount,
+           potentialInterestCount,
+           CASE 
+             WHEN userInterestCount + potentialInterestCount = 0 THEN 0
+             ELSE (sharedInterestCount * 2.0 / (userInterestCount + potentialInterestCount)) * 60
+           END AS interestScore,
+           
+           CASE 
+             WHEN abs(potential.age - u.age) <= 2 THEN 25
+             WHEN abs(potential.age - u.age) <= 5 THEN 20
+             WHEN abs(potential.age - u.age) <= 10 THEN 15
+             WHEN abs(potential.age - u.age) <= 15 THEN 10
+             ELSE 5
+           END AS ageScore,
+           
+           CASE 
+             WHEN uc.name = pc.name THEN 15
+             WHEN u.internationalMode = true AND potential.internationalMode = true THEN 10
+             ELSE 5
+           END AS locationScore
+
+      WITH potential,
+           sharedInterestCount,
+           interestScore + ageScore + locationScore AS totalMatchPercentage
 
       RETURN 
         {
           user: potential, 
           type: 'potential', 
           sharedInterests: sharedInterestCount,
-          matchPercentage: matchPercentage
+          matchPercentage: totalMatchPercentage
         } AS match
-      ORDER BY matchPercentage DESC, sharedInterestCount DESC
+      ORDER BY totalMatchPercentage DESC, sharedInterestCount DESC
       SKIP $skip
       LIMIT $limit
       `,
       { userId, skip: neo4j.int(skip), limit: neo4j.int(limit) }
     );
 
-    return result.records.map(record => ({
-      ...record.get('match').user.properties,
-      matchType: record.get('match').type,
-      sharedInterests: record.get('match').sharedInterests.low || 0,
-      matchPercentage: Math.round(record.get('match').matchPercentage * 100) / 100
-    }));
+    return result.records.map(record => {
+      const matchData = record.get('match');
+      console.log(Math.round(matchData.matchPercentage * 100) / 100)
+      return {
+        ...matchData.user.properties,
+        matchType: matchData.type,
+        sharedInterests: matchData.sharedInterests.low || matchData.sharedInterests || 0,
+        matchPercentage: Math.round(matchData.matchPercentage * 100) / 100
+      };
+    });
   } finally {
     await session.close();
   }
@@ -526,13 +560,58 @@ const getMatchesUser = async (userId, skip = 0, limit = 10) => {
   try {
     const result = await session.run(
       `
-      MATCH (u:User {id: $userId})-[:HAS_MATCH]->(m:Match)
+      MATCH (u:User {id: $userId})-[:HAS_GENDER]->(g:Gender)
+      MATCH (u)-[:FROM_COUNTRY]->(uc:Country)
+      MATCH (u)-[:SHARES_INTEREST]->(ui:Interest)
+      WITH u, uc, g, collect(ui.name) AS userInterests, count(ui) AS userInterestCount
+
+      MATCH (u)-[:HAS_MATCH]->(m:Match)
       MATCH (other:User)-[:HAS_MATCH]->(m)
       WHERE other.id <> u.id
+      
       OPTIONAL MATCH (m)-[:HAS_CHAT]->(c:Chat)
-      MATCH (other)-[:SHARES_INTEREST]->(i:Interest)
-      WITH m, other, collect(i.name) AS interests, c
-      RETURN m, other, interests, c
+      MATCH (other)-[:HAS_GENDER]->(og:Gender)
+      MATCH (other)-[:FROM_COUNTRY]->(oc:Country)
+      MATCH (other)-[:SHARES_INTEREST]->(oi:Interest)
+      
+      WITH m, other, c, u, uc, g, userInterests, userInterestCount, 
+           collect(oi.name) AS otherInterests, count(oi) AS otherInterestCount, oc
+
+      WITH m, other, c, u, uc, oc,
+           userInterests,
+           otherInterests,
+           userInterestCount,
+           otherInterestCount,
+           size([x IN otherInterests WHERE x IN userInterests]) AS sharedInterestCount
+
+      WITH m, other, c, u, uc, oc,
+           sharedInterestCount,
+           userInterestCount,
+           otherInterestCount,
+           otherInterests,
+           CASE 
+             WHEN userInterestCount + otherInterestCount = 0 THEN 0
+             ELSE (sharedInterestCount * 2.0 / (userInterestCount + otherInterestCount)) * 60
+           END AS interestScore,
+           
+           CASE 
+             WHEN abs(other.age - u.age) <= 2 THEN 25
+             WHEN abs(other.age - u.age) <= 5 THEN 20
+             WHEN abs(other.age - u.age) <= 10 THEN 15
+             WHEN abs(other.age - u.age) <= 15 THEN 10
+             ELSE 5
+           END AS ageScore,
+           
+           CASE 
+             WHEN uc.name = oc.name THEN 15
+             WHEN u.internationalMode = true AND other.internationalMode = true THEN 10
+             ELSE 5
+           END AS locationScore
+
+      WITH m, other, c, otherInterests, sharedInterestCount,
+           interestScore + ageScore + locationScore AS totalMatchPercentage
+
+      RETURN m, other, c, otherInterests, sharedInterestCount, totalMatchPercentage
       ORDER BY m.createdAt DESC
       SKIP $skip
       LIMIT $limit
@@ -544,6 +623,9 @@ const getMatchesUser = async (userId, skip = 0, limit = 10) => {
       const match = record.get('m').properties;
       const otherUser = record.get('other').properties;
       const chat = record.get('c') ? record.get('c').properties : { id: null, messages: [] };
+      const sharedInterests = record.get('sharedInterestCount').low || record.get('sharedInterestCount') || 0;
+      const matchPercentage = Math.round(record.get('totalMatchPercentage') * 100) / 100;
+      
       delete otherUser.password;
 
       const isUser1 = match.userId1 === userId;
@@ -556,9 +638,11 @@ const getMatchesUser = async (userId, skip = 0, limit = 10) => {
           ...otherUser,
           name: otherUserName,
           id: otherUserId,
-          interests: record.get('interests')
+          interests: record.get('otherInterests')
         },
-        chat
+        chat,
+        sharedInterests,
+        matchPercentage
       };
     });
   } finally {
