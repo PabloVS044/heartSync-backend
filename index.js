@@ -31,12 +31,28 @@ class HeartSyncServer {
   }
 
   middlewares() {
-    this.app.use(cors({
-      origin: 'http://localhost:5173', // o usa una función si tienes varios orígenes
+    const allowedOrigins = [
+      'http://localhost:5173',
+      'https://heart-sync.vercel.app' // Reemplazá con tu frontend en producción si cambia
+    ];
+
+    const corsOptions = {
+      origin: (origin, callback) => {
+        if (!origin || allowedOrigins.includes(origin)) {
+          callback(null, true);
+        } else {
+          console.warn(`Blocked by CORS: ${origin}`);
+          callback(new Error('Not allowed by CORS'));
+        }
+      },
       credentials: true,
       methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
       allowedHeaders: ['Content-Type', 'Authorization']
-    }));
+    };
+
+    this.app.use(cors(corsOptions));
+    this.app.options('*', cors(corsOptions));
+
     this.app.use(express.json());
     this.app.use(morgan('dev'));
     this.app.use(express.static('public'));
@@ -94,7 +110,6 @@ class HeartSyncServer {
             return;
           }
           const updatedChat = await chatModel.addReactionToMessage(chatId, messageId, userId, emoji);
-          const updatedMessage = updatedChat.messages.find(msg => msg.id === messageId);
           this.io.to(chatId).emit('messageReaction', { chatId, messageId, reaction: { userId, emoji } });
         } catch (error) {
           socket.emit('error', { message: error.message });
