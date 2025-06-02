@@ -4,15 +4,12 @@ const adController = require('../controllers/adController');
 const adModel = require('../models/adModel');
 
 router.post('/', adController.createAd);
-router.get('/', adController.getAds);
 router.get('/:id', adController.getAd);
-router.put('/:id', adController.updateAd);
-router.delete('/:id', adController.deleteAd);
-router.get('/user/:userId', adController.getAdsForUser);
-router.get('/stats', async (req, res) => {
+router.patch('/:id/archive', adController.archiveAd);
+router.get('/archived', async (req, res) => {
   try {
-    const stats = await adModel.getAdStats();
-    res.json(stats);
+    const archivedAds = await adModel.getArchivedAds();
+    res.json(archivedAds);
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
