@@ -1,19 +1,14 @@
-const { body, param, query, validationResult } = require('express-validator');
+const { body, param, validationResult } = require('express-validator');
 const userModel = require('../models/userModel');
-const jwt = require('jsonwebtoken');
-
-const JWT_SECRET = process.env.JWT_SECRET;
 
 const validateUser = [
   body('name').notEmpty().withMessage('Name is required'),
   body('email').isEmail().withMessage('Invalid email'),
-  body('password').notEmpty().withMessage('Password is required'),
   body('age').isInt({ min: 18 }).withMessage('Age must be at least 18'),
 ];
 
-const validateLogin = [
-  body('email').isEmail().withMessage('Invalid email'),
-  body('password').notEmpty().withMessage('Password is required'),
+const validateVerifyEmail = [
+  param('token').notEmpty().withMessage('Verification token is required'),
 ];
 
 const createUser = [
@@ -24,47 +19,29 @@ const createUser = [
       return res.status(400).json({ errors: errors.array() });
     }
     try {
-      const user = await userModel.createUser(req.body);
-      res.status(201).json(user);
+      const user = await userModel.createUser({ ...req.body, isEmailVerified: false });
+      // Simulación de envío de email de verificación
+      const verificationToken = 'mockToken'; // En producción, generar y enviar token
+      res.status(201).json({ ...user, verificationToken });
     } catch (error) {
       res.status(500).json({ error: error.message });
     }
   },
 ];
 
-const login = [
-  ...validateLogin,
+const verifyEmail = [
+  ...validateVerifyEmail,
   async (req, res) => {
     const errors = validationResult(req);
     if (!errors.isEmpty()) {
       return res.status(400).json({ errors: errors.array() });
     }
     try {
-      const { email, password } = req.body;
-      const user = await userModel.loginUser(email, password);
-      const token = jwt.sign({ userId: user.id, email: user.email }, JWT_SECRET, { expiresIn: '1h' });
-      res.status(200).json({ token, userId: user.id });
-    } catch (error) {
-      res.status(401).json({ error: error.message });
-    }
-  },
-];
-
-const getUserStats = [
-  param('id').notEmpty().withMessage('User ID is required'),
-  async (req, res) => {
-    try {
-      const user = await userModel.getUser(req.params.id);
+      const user = await userModel.verifyEmail(req.params.token);
       if (!user) {
-        return res.status(404).json({ error: 'User not found' });
+        return res.status(404).json({ error: 'Invalid or expired token' });
       }
-      const stats = {
-        matchesCount: user.matches?.length || 0,
-        likesGiven: user.likesGiven?.length || 0,
-        likesReceived: user.likesReceived?.length || 0,
-        lastActive: user.lastActive,
-      };
-      res.json(stats);
+      res.json({ message: 'Email verified successfully', user });
     } catch (error) {
       res.status(500).json({ error: error.message });
     }
@@ -73,6 +50,5 @@ const getUserStats = [
 
 module.exports = {
   createUser,
-  login,
-  getUserStats,
+  verifyEmail,
 };
