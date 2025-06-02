@@ -6,18 +6,20 @@ const validateAd = [
   body('description').notEmpty().withMessage('Description is required'),
   body('image').optional().isURL().withMessage('Image must be a valid URL'),
   body('targetedInterests').isArray().withMessage('Targeted interests must be an array'),
-  body('targetedInterests.*').isString().withMessage('Each interest must be a string')
+  body('targetedInterests.*').isString().withMessage('Each interest must be a string'),
 ];
 
 const validateAds = [
   query('skip').optional().isInt({ min: 0 }).withMessage('Skip must be a non-negative integer'),
-  query('limit').optional().isInt({ min: 1, max: 50 }).withMessage('Limit must be between 1 and 50')
+  query('limit').optional().isInt({ min: 1, max: 50 }).withMessage('Limit must be between 1 and 50'),
+  query('interests').optional().isArray().withMessage('Interests must be an array'),
+  query('interests.*').optional().isString().withMessage('Each interest must be a string'),
 ];
 
 const validateUserAds = [
   param('userId').notEmpty().withMessage('User ID is required'),
   query('skip').optional().isInt({ min: 0 }).withMessage('Skip must be a non-negative integer'),
-  query('limit').optional().isInt({ min: 1, max: 50 }).withMessage('Limit must be between 1 and 50')
+  query('limit').optional().isInt({ min: 1, max: 50 }).withMessage('Limit must be between 1 and 50'),
 ];
 
 const createAd = [
@@ -31,9 +33,9 @@ const createAd = [
       const ad = await adModel.createAd(req.body);
       res.status(201).json(ad);
     } catch (error) {
-      res.status(500).json({ error: error.message });
+      res.status(500).json({ error: `Failed to create ad: ${error.message}` });
     }
-  }
+  },
 ];
 
 const getAd = [
@@ -52,7 +54,7 @@ const getAd = [
     } catch (error) {
       res.status(500).json({ error: error.message });
     }
-  }
+  },
 ];
 
 const getAds = [
@@ -65,12 +67,13 @@ const getAds = [
     try {
       const skip = parseInt(req.query.skip) || 0;
       const limit = parseInt(req.query.limit) || 10;
-      const ads = await adModel.getAds(skip, limit);
+      const interests = req.query.interests || [];
+      const ads = await adModel.getAds(skip, limit, interests);
       res.json(ads);
     } catch (error) {
       res.status(500).json({ error: error.message });
     }
-  }
+  },
 ];
 
 const updateAd = [
@@ -90,7 +93,7 @@ const updateAd = [
     } catch (error) {
       res.status(500).json({ error: error.message });
     }
-  }
+  },
 ];
 
 const deleteAd = [
@@ -109,7 +112,7 @@ const deleteAd = [
     } catch (error) {
       res.status(500).json({ error: error.message });
     }
-  }
+  },
 ];
 
 const getAdsForUser = [
@@ -127,7 +130,7 @@ const getAdsForUser = [
     } catch (error) {
       res.status(500).json({ error: error.message });
     }
-  }
+  },
 ];
 
 module.exports = {
@@ -136,5 +139,5 @@ module.exports = {
   getAds,
   updateAd,
   deleteAd,
-  getAdsForUser
+  getAdsForUser,
 };
